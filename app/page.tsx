@@ -10,6 +10,7 @@ import {
     HotspotCluster,
 } from "./types";
 import { MOCK_TRANSIT_LINES } from "./data/mockData";
+import ttcRoutesRaw from "./data/ttc_routes.json";
 import { calculateScenario } from "./utils/simulation";
 import { computeNeedScore } from "./utils/scoring";
 
@@ -74,8 +75,38 @@ export default function Home() {
     // Hotspot clusters
     const [hotspots, setHotspots] = useState<HotspotCluster[]>([]);
     
-    // Transit lines from GTFS
-    const [transitLines, setTransitLines] = useState<TransitLine[]>(MOCK_TRANSIT_LINES);
+    // Merge GTFS routes with hand-crafted mock lines (which have better descriptions)
+    const [transitLines] = useState<TransitLine[]>(() => {
+        const gtfsById = new Map<string, any>();
+        (ttcRoutesRaw as any[]).forEach(r => gtfsById.set(r.id, r));
+
+        // Map mock IDs → GTFS IDs for subway lines so we can use GTFS coordinates
+        const mockToGtfs: Record<string, string> = {
+            line1: "1",
+            line2: "2",
+            line3: "4",
+        };
+
+        // Enhance mock lines: replace subway coordinates with accurate GTFS paths
+        const enhanced = MOCK_TRANSIT_LINES.map(line => {
+            const gtfsId = mockToGtfs[line.id];
+            if (gtfsId && gtfsById.has(gtfsId)) {
+                return { ...line, coordinates: gtfsById.get(gtfsId).coordinates };
+            }
+            return line;
+        });
+
+        // IDs already covered by mock lines (including GTFS equivalents)
+        const coveredGtfsIds = new Set(["1", "2", "4", "5", "504", "510", "939", "35", "52"]);
+        const extraGtfs: TransitLine[] = (ttcRoutesRaw as any[])
+            .filter(r => !coveredGtfsIds.has(r.id))
+            .map(r => ({
+                ...r,
+                stations: [], // GTFS stations are all at the same point (parser bug)
+            }));
+
+        return [...enhanced, ...extraGtfs];
+    });
 
     // Density GeoJSON from API
     const [densityGeoJSON, setDensityGeoJSON] = useState<DensityGeoJSON | null>(
