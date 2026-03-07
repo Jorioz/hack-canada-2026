@@ -50,7 +50,9 @@ export default function Home() {
     >("explore");
     const [layers, setLayers] = useState<LayerVisibility>({
         needScore: true,
-        transitLines: true,
+        busLines: true,
+        lrtLines: true,
+        subwayLines: true,
         trafficHotspots: true,
         zoneLabels: false,
     });
@@ -70,6 +72,9 @@ export default function Home() {
 
     // Hotspot clusters
     const [hotspots, setHotspots] = useState<HotspotCluster[]>([]);
+    
+    // Transit lines from GTFS
+    const [transitLines, setTransitLines] = useState<TransitLine[]>(MOCK_TRANSIT_LINES);
 
     // Density GeoJSON from API
     const [densityGeoJSON, setDensityGeoJSON] = useState<DensityGeoJSON | null>(
@@ -175,7 +180,7 @@ export default function Home() {
             scenarioMode,
             stationSpacing,
             zones,
-            MOCK_TRANSIT_LINES,
+            transitLines,
         );
         const newScenario: Scenario = {
             id: `scenario-${Date.now()}`,
@@ -192,7 +197,7 @@ export default function Home() {
         setDrawingWaypoints([]);
         setDrawingPath([]);
         setActiveTab("scenarios");
-    }, [drawingPath, scenarioMode, stationSpacing, zones, scenarios.length]);
+    }, [drawingPath, scenarioMode, stationSpacing, zones, scenarios.length, transitLines]);
 
     const handleCancelDrawing = useCallback(() => {
         setIsDrawing(false);
@@ -251,7 +256,7 @@ export default function Home() {
             {/* Map */}
             <div className="flex-1 relative">
                 <TransitMap
-                    transitLines={MOCK_TRANSIT_LINES}
+                    transitLines={transitLines}
                     selectedLine={selectedLine}
                     onLineClick={handleLineClick}
                     onMapClick={handleMapClick}
