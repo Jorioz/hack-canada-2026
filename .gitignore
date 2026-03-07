@@ -40,3 +40,6 @@ __pycache__/
 
 # Ignore frontend massive data folders
 app/data/*/
+
+#ignore ttc route data
+api/data/ttc/*

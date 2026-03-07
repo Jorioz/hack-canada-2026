@@ -2,6 +2,7 @@ from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 import logging
 from api.data_service import DataService
+from api.utils.transit import load_transit_benefit_scores, load_transit_benefit_geojson
 
 app = FastAPI(docs_url="/api/py/docs", openapi_url="/api/py/openapi.json")
 
@@ -69,3 +70,61 @@ def get_traffic_by_neighbourhood(neighbourhood: str):
     result = match.to_dict(orient="records")[0]
     logger.info("GET /api/py/traffic/%s success", neighbourhood)
     return result
+
+
+@app.get("/api/py/transit/benefit")
+def get_transit_benefit_scores(
+    density_weight: float = Query(default=0.35, ge=0),
+    traffic_weight: float = Query(default=0.30, ge=0),
+    distance_weight: float = Query(default=0.35, ge=0),
+):
+    use_default_weights = (
+        density_weight == 0.35 and traffic_weight == 0.30 and distance_weight == 0.35
+    )
+
+    if use_default_weights:
+        result = data.transit_benefit.to_dict(orient="records")
+    else:
+        result = load_transit_benefit_scores(
+            density_weight=density_weight,
+            traffic_weight=traffic_weight,
+            distance_weight=distance_weight,
+        ).to_dict(orient="records")
+
+    logger.info(
+        "GET /api/py/transit/benefit success: returned %d neighbourhoods (w=%.2f/%.2f/%.2f)",
+        len(result),
+        density_weight,
+        traffic_weight,
+        distance_weight,
+    )
+    return result
+
+
+@app.get("/api/py/transit/benefit/geojson")
+def get_transit_benefit_geojson(
+    density_weight: float = Query(default=0.35, ge=0),
+    traffic_weight: float = Query(default=0.30, ge=0),
+    distance_weight: float = Query(default=0.35, ge=0),
+):
+    use_default_weights = (
+        density_weight == 0.35 and traffic_weight == 0.30 and distance_weight == 0.35
+    )
+
+    if use_default_weights:
+        geojson = data.transit_benefit_geojson
+    else:
+        geojson = load_transit_benefit_geojson(
+            density_weight=density_weight,
+            traffic_weight=traffic_weight,
+            distance_weight=distance_weight,
+        )
+
+    logger.info(
+        "GET /api/py/transit/benefit/geojson success: returned %d features (w=%.2f/%.2f/%.2f)",
+        len(geojson["features"]),
+        density_weight,
+        traffic_weight,
+        distance_weight,
+    )
+    return JSONResponse(content=geojson)
