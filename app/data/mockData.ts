@@ -418,7 +418,7 @@ export const MOCK_TRANSIT_LINES: TransitLine[] = [
     name: "Line 1 Yonge-University",
     description: "Toronto's oldest and busiest subway line. Opened in 1954 as the Yonge subway, it forms a U-shape connecting Finch in the north to Union Station downtown, and up to Vaughan Metropolitan Centre. It is the backbone of the TTC network, relieving massive surface traffic congestion on Yonge Street.",
     mode: "subway",
-    color: "#FFCD00",
+    color: "#22c55e",
     coordinates: [
       [43.7825, -79.4153], // Finch
       [43.7709, -79.4128], // North York Centre
@@ -458,7 +458,7 @@ export const MOCK_TRANSIT_LINES: TransitLine[] = [
     name: "Line 2 Bloor-Danforth",
     description: "Opened in 1966, this major east-west subway artery runs perfectly parallel to the lakeshore across the city. It replaced a heavily congested streetcar route and connected the growing suburban regions of Etobicoke (Kipling) and Scarborough (Kennedy) directly to the downtown core.",
     mode: "subway",
-    color: "#00A650",
+    color: "#22c55e",
     coordinates: [
       [43.6451, -79.5363], // Kipling
       [43.6466, -79.5225], // Islington
@@ -502,7 +502,7 @@ export const MOCK_TRANSIT_LINES: TransitLine[] = [
     name: "Line 4 Sheppard",
     description: "A short east-west subway line in North York opened in 2002. It was originally planned to span from Downsview to Scarborough, but was cut short due to funding. It acts as a catalyst for dense, transit-oriented development (TOD) along the Sheppard East corridor.",
     mode: "subway",
-    color: "#A5489B",
+    color: "#22c55e",
     coordinates: [
       [43.7615, -79.4111], // Sheppard-Yonge
       [43.7602, -79.3919], // Bayview
@@ -525,7 +525,7 @@ export const MOCK_TRANSIT_LINES: TransitLine[] = [
     name: "Eglinton Crosstown LRT",
     description: "A massive multi-billion dollar light rail transit (LRT) project running 19km across Midtown Toronto. Once fully operational, it is expected to cut travel times by up to 60%, removing thousands of cars from the highly congested Eglinton Avenue.",
     mode: "lrt",
-    color: "#F5A623",
+    color: "#eab308",
     coordinates: [
       [43.6912, -79.5065], // Mt. Dennis
       [43.6942, -79.4875], // Keelesdale
@@ -554,7 +554,7 @@ export const MOCK_TRANSIT_LINES: TransitLine[] = [
     name: "504 King Streetcar",
     description: "The busiest surface transit route in Toronto. In 2017, the city implemented the 'King Street Transit Pilot' which restricted car traffic, dramatically improving streetcar speed and reliability, and increasing ridership by over 16%.",
     mode: "lrt",
-    color: "#E2001A", // TTC Red
+    color: "#eab308", // Yellow
     coordinates: [
       [43.6538, -79.4542], // Dundas West
       [43.6395, -79.4162], // Liberty Village / King & Dufferin
@@ -575,7 +575,7 @@ export const MOCK_TRANSIT_LINES: TransitLine[] = [
     name: "510 Spadina Streetcar",
     description: "A dedicated right-of-way streetcar line acting as the primary transit spine for the dense Spadina Avenue corridor, connecting the Bloor subway down to the waterfront. Its dedicated lanes allow it to bypass regular street traffic.",
     mode: "lrt",
-    color: "#E2001A", // TTC Red
+    color: "#eab308", // Yellow
     coordinates: [
       [43.6672, -79.4038], // Spadina Stn
       [43.6592, -79.4005], // College

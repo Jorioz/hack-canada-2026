@@ -231,9 +231,14 @@ export default function TransitMap({
             lgLines.clearLayers();
             lgStations.clearLayers();
 
-            if (!layers.transitLines) return;
+            const visibleModes = new Set<string>();
+            if (layers.subwayLines) visibleModes.add("subway");
+            if (layers.lrtLines) visibleModes.add("lrt");
+            if (layers.busLines) visibleModes.add("bus");
 
-            transitLines.forEach((line) => {
+            if (visibleModes.size === 0) return;
+
+            transitLines.filter(line => visibleModes.has(line.mode)).forEach((line) => {
                 const polyline = L.polyline(line.coordinates, {
                     color: line.color,
                     weight: line.mode === "subway" ? 4 : 3,
@@ -297,7 +302,7 @@ export default function TransitMap({
         };
 
         updateLines();
-    }, [transitLines, layers.transitLines]);
+    }, [transitLines, layers.subwayLines, layers.lrtLines, layers.busLines]);
 
     // Update hotspots
     useEffect(() => {
