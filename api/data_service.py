@@ -1,6 +1,7 @@
 import pandas as pd
 from api.utils.density import load_neighbourhood_density, load_density_geojson
 from api.utils.traffic import load_traffic_by_neighbourhood, load_traffic_geojson, load_top_intersections
+from api.utils.transit import load_transit_benefit_scores, load_transit_benefit_geojson
 
 
 class DataService:
@@ -10,6 +11,8 @@ class DataService:
         self.traffic = load_traffic_by_neighbourhood()
         self.traffic_geojson = load_traffic_geojson()
         self.traffic_intersections = load_top_intersections(min_total_vehicle=0, limit=None)
+        self.transit_benefit = load_transit_benefit_scores()
+        self.transit_benefit_geojson = load_transit_benefit_geojson()
 
 
 if __name__ == "__main__":
