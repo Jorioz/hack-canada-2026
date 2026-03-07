@@ -1,121 +1,243 @@
-import Image from "next/image";
-import Link from "next/link";
+"use client";
+
+import { useEffect, useState, useCallback, useRef } from "react";
+import { Zone, TransitLine, Scenario, ScenarioMode, LayerVisibility, HotspotCluster } from "./types";
+import { MOCK_ZONES, MOCK_TRANSIT_LINES } from "./data/mockData";
+import { computeNeedScore } from "./utils/scoring";
+import { calculateScenario } from "./utils/simulation";
+import { DEFAULT_WEIGHTS } from "./types";
+
+import TransitMap from "./components/TransitMap";
+import Sidebar from "./components/Sidebar";
 
 export default function Home() {
+  // Compute Need Scores for all zones
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [selectedZone, setSelectedZone] = useState<Zone | null>(null);
+  const [selectedLine, setSelectedLine] = useState<TransitLine | null>(null);
+  const [activeTab, setActiveTab] = useState<"explore" | "hotspots" | "scenarios">("explore");
+  const [layers, setLayers] = useState<LayerVisibility>({
+    needScore: true,
+    transitLines: true,
+    trafficHotspots: true,
+    zoneLabels: false,
+  });
+
+  // Scenario state
+  const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [drawingWaypoints, setDrawingWaypoints] = useState<[number, number][]>([]);
+  const [drawingPath, setDrawingPath] = useState<[number, number][]>([]);
+  const [isRouting, setIsRouting] = useState(false);
+  const [scenarioMode, setScenarioMode] = useState<ScenarioMode>("subway");
+  const [stationSpacing, setStationSpacing] = useState(800);
+  const [mapCenter, setMapCenter] = useState<[number, number]>([43.7, -79.4]);
+  const [mapZoom, setMapZoom] = useState(11);
+
+  // Hotspot clusters
+  const [hotspots, setHotspots] = useState<HotspotCluster[]>([]);
+
+  // Compute scores on mount
+  useEffect(() => {
+    const scored = MOCK_ZONES.map((zone) => ({
+      ...zone,
+      needScore: computeNeedScore(zone, MOCK_ZONES, DEFAULT_WEIGHTS),
+    }));
+    setZones(scored);
+
+    // Compute hotspot clusters (simple: top 8 zones by score)
+    const sorted = [...scored].sort((a, b) => b.needScore - a.needScore);
+    const topZones = sorted.slice(0, 8);
+    const clusters: HotspotCluster[] = topZones.map((zone, i) => ({
+      id: `cluster-${i}`,
+      label: `Hotspot ${String.fromCharCode(65 + i)}`,
+      zones: [zone],
+      avgScore: zone.needScore,
+      center: zone.center,
+    }));
+    setHotspots(clusters);
+  }, []);
+
+  const handleZoneClick = useCallback((zone: Zone) => {
+    setSelectedLine(null);
+    setSelectedZone(zone);
+    setActiveTab("explore");
+  }, []);
+
+  const handleLineClick = useCallback((line: TransitLine) => {
+    setSelectedZone(null);
+    setSelectedLine(line);
+    setActiveTab("explore");
+  }, []);
+
+  const handleMapClick = useCallback(
+    async (latlng: [number, number]) => {
+      if (!isDrawing || isRouting) return;
+
+      const newWaypoints = [...drawingWaypoints, latlng];
+      setDrawingWaypoints(newWaypoints);
+
+      if (newWaypoints.length >= 2) {
+        if (scenarioMode === "subway") {
+          // Subways go underground, straight point-to-point
+          setDrawingPath((prev) => [...prev, latlng]);
+        } else {
+          // Fetch road-snapped route for surface modes
+          setIsRouting(true);
+          try {
+            const { getRouteSegment } = await import("./utils/routing");
+            const prevPoint = newWaypoints[newWaypoints.length - 2];
+            const segment = await getRouteSegment(prevPoint, latlng);
+            // Append segment (skip first point to avoid duplicates)
+            setDrawingPath((prev) => [...prev, ...segment.slice(prev.length > 0 ? 1 : 0)]);
+          } catch {
+            // Fallback: straight line
+            setDrawingPath((prev) => [...prev, latlng]);
+          } finally {
+            setIsRouting(false);
+          }
+        }
+      } else {
+        // First point
+        setDrawingPath([latlng]);
+      }
+    },
+    [isDrawing, isRouting, drawingWaypoints, scenarioMode]
+  );
+
+  const handleStartDrawing = useCallback(() => {
+    setIsDrawing(true);
+    setDrawingWaypoints([]);
+    setDrawingPath([]);
+  }, []);
+
+  const handleFinishDrawing = useCallback(() => {
+    if (drawingPath.length < 2) return;
+    setIsDrawing(false);
+
+    const result = calculateScenario(drawingPath, scenarioMode, stationSpacing, zones, MOCK_TRANSIT_LINES);
+    const newScenario: Scenario = {
+      id: `scenario-${Date.now()}`,
+      name: `Scenario ${scenarios.length + 1}`,
+      mode: scenarioMode,
+      path: [...drawingPath],
+      stationSpacing,
+      result,
+      createdAt: new Date(),
+      visible: true,
+    };
+
+    setScenarios((prev) => [...prev, newScenario]);
+    setDrawingWaypoints([]);
+    setDrawingPath([]);
+    setActiveTab("scenarios");
+  }, [drawingPath, scenarioMode, stationSpacing, zones, scenarios.length]);
+
+  const handleCancelDrawing = useCallback(() => {
+    setIsDrawing(false);
+    setDrawingWaypoints([]);
+    setDrawingPath([]);
+  }, []);
+
+  const handleDeleteScenario = useCallback((id: string) => {
+    setScenarios((prev) => prev.filter((s) => s.id !== id));
+  }, []);
+
+  const handleToggleScenario = useCallback((id: string) => {
+    setScenarios((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, visible: !s.visible } : s))
+    );
+  }, []);
+
+  const handleZoomToZone = useCallback((zone: Zone) => {
+    setMapCenter(zone.center);
+    setMapZoom(14);
+    setSelectedZone(zone);
+  }, []);
+
+  const toggleLayer = useCallback((layer: keyof LayerVisibility) => {
+    setLayers((prev) => ({ ...prev, [layer]: !prev[layer] }));
+  }, []);
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 w-full max-w-5xl items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing FastApi API&nbsp;
-          <Link href="/api/py/helloFastApi">
-            <code className="font-mono font-bold">api/index.py</code>
-          </Link>
-        </p>
-        <p className="fixed right-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing Next.js API&nbsp;
-          <Link href="/api/helloNextJs">
-            <code className="font-mono font-bold">app/api/helloNextJs</code>
-          </Link>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:h-auto lg:w-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
-        </div>
-      </div>
+    <main className="flex h-screen w-screen overflow-hidden bg-[var(--color-bg-primary)]">
+      {/* Sidebar */}
+      <Sidebar
+        zones={zones}
+        selectedZone={selectedZone}
+        selectedLine={selectedLine}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        hotspots={hotspots}
+        scenarios={scenarios}
+        onZoneClick={handleZoneClick}
+        onZoomToZone={handleZoomToZone}
+        onStartDrawing={handleStartDrawing}
+        onFinishDrawing={handleFinishDrawing}
+        onCancelDrawing={handleCancelDrawing}
+        isDrawing={isDrawing}
+        drawingPath={drawingPath}
+        scenarioMode={scenarioMode}
+        onScenarioModeChange={setScenarioMode}
+        stationSpacing={stationSpacing}
+        onStationSpacingChange={setStationSpacing}
+        onDeleteScenario={handleDeleteScenario}
+        onToggleScenario={handleToggleScenario}
+        layers={layers}
+        onToggleLayer={toggleLayer}
+      />
 
-      <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-[240px] after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 before:lg:h-[360px]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
+      {/* Map */}
+      <div className="flex-1 relative">
+        <TransitMap
+          zones={zones}
+          transitLines={MOCK_TRANSIT_LINES}
+          selectedZone={selectedZone}
+          selectedLine={selectedLine}
+          onZoneClick={handleZoneClick}
+          onLineClick={handleLineClick}
+          onMapClick={handleMapClick}
+          layers={layers}
+          isDrawing={isDrawing}
+          drawingPath={drawingPath}
+          drawingWaypoints={drawingWaypoints}
+          scenarios={scenarios}
+          hotspots={hotspots}
+          center={mapCenter}
+          zoom={mapZoom}
         />
-      </div>
 
-      <div className="mb-32 grid text-center lg:mb-0 lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Docs{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
+        {/* Drawing Mode Overlay */}
+        {isDrawing && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] glass-panel px-6 py-3 flex items-center gap-4 animate-fade-up">
+            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            <span className="text-sm font-medium text-[var(--color-text-primary)]">
+              Click on the map to draw your transit line
             </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800 hover:dark:bg-opacity-30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Learn{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
+            <span className="text-xs text-[var(--color-text-muted)]">
+              {drawingWaypoints.length} waypoint{drawingWaypoints.length !== 1 ? "s" : ""}
             </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Templates{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Explore the Next.js 13 playground.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Deploy{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
+            {isRouting && (
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 border-2 border-[var(--color-accent-cyan)] border-t-transparent rounded-full animate-spin" />
+                <span className="text-[10px] text-[var(--color-accent-cyan)]">Routing...</span>
+              </div>
+            )}
+            <button
+              onClick={handleFinishDrawing}
+              disabled={drawingWaypoints.length < 2 || isRouting}
+              className="px-3 py-1 rounded-md text-xs font-medium bg-[var(--color-accent-green)] text-white disabled:opacity-30 disabled:cursor-not-allowed hover:brightness-110 transition"
+            >
+              Finish
+            </button>
+            <button
+              onClick={handleCancelDrawing}
+              className="px-3 py-1 rounded-md text-xs font-medium bg-[var(--color-accent-red)] text-white hover:brightness-110 transition"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
     </main>
   );
