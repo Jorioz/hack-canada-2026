@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import pandas as pd
 import geopandas as gpd
 
@@ -25,6 +26,36 @@ def load_neighbourhood_density() -> pd.DataFrame:
     merged['density_per_km2'] = merged['population'] / merged['area_km2']
 
     return merged
+
+
+def load_density_geojson() -> dict:
+    """Return a GeoJSON FeatureCollection with density properties on each neighbourhood."""
+    density_df = load_neighbourhood_density()
+
+    gdf = gpd.read_file(DATA_DIR / NEIGHBOURHOOD_GEOSHAPES)
+    # Keep original CRS (4326) for frontend map display
+    gdf = gdf.rename(columns={'AREA_NAME': 'neighbourhood'})
+
+    merged = gdf.merge(density_df[['neighbourhood', 'population', 'area_km2', 'density_per_km2']],
+                       on='neighbourhood', how='left')
+
+    # Build a clean GeoJSON FeatureCollection
+    features = []
+    for _, row in merged.iterrows():
+        feature = {
+            "type": "Feature",
+            "geometry": json.loads(gpd.GeoSeries([row.geometry]).to_json())["features"][0]["geometry"],
+            "properties": {
+                "neighbourhood": row["neighbourhood"],
+                "population": float(row["population"]) if pd.notna(row["population"]) else 0,
+                "area_km2": round(float(row["area_km2"]), 4) if pd.notna(row["area_km2"]) else 0,
+                "density_per_km2": round(float(row["density_per_km2"]), 2) if pd.notna(row["density_per_km2"]) else 0,
+            }
+        }
+        features.append(feature)
+
+    return {"type": "FeatureCollection", "features": features}
+
 
 if __name__ == "__main__":
     print(load_neighbourhood_density().to_string())

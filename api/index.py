@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 import logging
 from api.data_service import DataService
 
@@ -14,6 +15,11 @@ def get_density():
     result = data.density[["neighbourhood", "population", "area_km2", "density_per_km2"]].to_dict(orient="records")
     logger.info("GET /api/py/density success: returned %d neighbourhoods", len(result))
     return result
+
+@app.get("/api/py/density/geojson")
+def get_density_geojson():
+    logger.info("GET /api/py/density/geojson success: returned %d features", len(data.density_geojson["features"]))
+    return JSONResponse(content=data.density_geojson)
 
 @app.get("/api/py/density/{neighbourhood}")
 def get_density_by_neighbourhood(neighbourhood: str):
