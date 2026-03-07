@@ -11,6 +11,7 @@ import {
 } from "./types";
 import { MOCK_TRANSIT_LINES } from "./data/mockData";
 import { calculateScenario } from "./utils/simulation";
+import { computeNeedScore } from "./utils/scoring";
 
 import TransitMap from "./components/TransitMap";
 import Sidebar from "./components/Sidebar";
@@ -91,7 +92,67 @@ export default function Home() {
     useEffect(() => {
         fetch("/api/py/density/geojson")
             .then((res) => res.json())
-            .then((data: DensityGeoJSON) => setDensityGeoJSON(data))
+            .then((data: DensityGeoJSON) => {
+                setDensityGeoJSON(data);
+                
+                // Generate Zones from GeoJSON features
+                const generatedZones: Zone[] = data.features.map((feature, index) => {
+                    const p = feature.properties;
+                    
+                    // Generate realistic mock data based on population density
+                    // E.g. high density -> high job density, higher traffic, closer to transit
+                    const isHighDensity = p.density_per_km2 > 10000;
+                    const isMediumDensity = p.density_per_km2 > 5000;
+                    
+                    const jobMultiplier = isHighDensity ? 2.5 : isMediumDensity ? 1.0 : 0.5;
+                    const jobDensity = Math.round(p.density_per_km2 * jobMultiplier);
+                    
+                    const trafficLevel = isHighDensity ? 85 - (index % 15) : isMediumDensity ? 65 - (index % 10) : 45 - (index % 10);
+                    const distanceToTransit = isHighDensity ? 0.2 + (index % 5) * 0.1 : isMediumDensity ? 1.5 + (index % 10) * 0.2 : 3.5 + (index % 15) * 0.3;
+                    
+                    const medianIncomeBase = isHighDensity ? 65000 : isMediumDensity ? 85000 : 95000;
+                    const medianIncome = medianIncomeBase + (index % 20) * 1000 - 10000;
+                    
+                    const existingRidershipBase = isHighDensity ? 35000 : isMediumDensity ? 15000 : 5000;
+                    const existingRidership = existingRidershipBase + (index % 30) * 500;
+                    
+                    // Use bbox center approximation for center point
+                    const coords = feature.geometry.coordinates[0][0];
+                    let latSum = 0, lngSum = 0;
+                    coords.forEach((coord: number[]) => {
+                        lngSum += coord[0];
+                        latSum += coord[1];
+                    });
+                    const center: [number, number] = [latSum / coords.length, lngSum / coords.length];
+                    
+                    // Simplify polygon for app state
+                    const coordinates: [number, number][] = coords.map((c: number[]) => [c[0], c[1]]);
+
+                    return {
+                        id: `zone-${index}`,
+                        name: p.neighbourhood,
+                        coordinates,
+                        center,
+                        populationDensity: Math.round(p.density_per_km2),
+                        jobDensity,
+                        trafficLevel,
+                        distanceToTransit: Number(distanceToTransit.toFixed(1)),
+                        medianIncome,
+                        growthFlag: index % 3 === 0,
+                        existingRidership,
+                        landUse: isHighDensity ? "mixed" : "residential",
+                        needScore: 0, // Computed below
+                    };
+                });
+                
+                // Compute need scores
+                const zonesWithScores = generatedZones.map(zone => ({
+                    ...zone,
+                    needScore: computeNeedScore(zone, generatedZones)
+                }));
+                
+                setZones(zonesWithScores);
+            })
             .catch((err) =>
                 console.error("Failed to fetch density GeoJSON:", err),
             );
@@ -257,8 +318,10 @@ export default function Home() {
             <div className="flex-1 relative">
                 <TransitMap
                     transitLines={transitLines}
+                    zones={zones}
                     selectedLine={selectedLine}
                     onLineClick={handleLineClick}
+                    onZoneClick={handleZoneClick}
                     onMapClick={handleMapClick}
                     layers={layers}
                     isDrawing={isDrawing}

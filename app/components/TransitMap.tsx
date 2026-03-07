@@ -6,6 +6,7 @@ import {
     Scenario,
     HotspotCluster,
     LayerVisibility,
+    Zone,
 } from "../types";
 
 function getDensityColor(ratio: number): string {
@@ -53,8 +54,10 @@ interface TrafficIntersection {
 
 interface TransitMapProps {
     transitLines: TransitLine[];
+    zones: Zone[];
     selectedLine: TransitLine | null;
     onLineClick: (line: TransitLine) => void;
+    onZoneClick: (zone: Zone) => void;
     onMapClick: (latlng: [number, number]) => void;
     layers: LayerVisibility;
     isDrawing: boolean;
@@ -70,8 +73,10 @@ interface TransitMapProps {
 
 export default function TransitMap({
     transitLines,
+    zones,
     selectedLine,
     onLineClick,
+    onZoneClick,
     onMapClick,
     layers,
     isDrawing,
@@ -204,6 +209,9 @@ export default function TransitMap({
         const lg = layerGroupsRef.current.density;
         if (!lg || !mapRef.current) return;
 
+        // Make onZoneClick accessible in the Leaflet event handler
+        const currentOnZoneClick = onZoneClick;
+
         const updateDensity = async () => {
             const L = (await import("leaflet")).default;
             lg.clearLayers();
@@ -237,12 +245,21 @@ export default function TransitMap({
               Density: <strong>${Number(p.density_per_km2).toLocaleString()}/km²</strong>
             </div>`,
                     );
+
+                    layer.on("click", () => {
+                        const matchingZone = zones.find(
+                            (z) => z.name.toLowerCase() === p.neighbourhood.toLowerCase()
+                        );
+                        if (matchingZone) {
+                            currentOnZoneClick(matchingZone);
+                        }
+                    });
                 },
             }).addTo(lg);
         };
 
         updateDensity();
-    }, [densityGeoJSON, layers.needScore]);
+    }, [densityGeoJSON, layers.needScore, zones, onZoneClick]);
 
     // Update traffic intersections
     useEffect(() => {
