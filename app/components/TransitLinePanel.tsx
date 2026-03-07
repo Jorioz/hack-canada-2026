@@ -161,44 +161,56 @@ export default function TransitLinePanel({ line, zones }: TransitLinePanelProps)
       {/* Route Profile Grid */}
       <div className="grid grid-cols-2 gap-2 mt-4">
         {routeStats.map(({ icon: IconComponent, label, value, unit, color: sColor }) => (
-          <div key={label} className="stat-card">
-            <div className="flex items-center gap-1.5 mb-1">
-              <IconComponent size={12} style={{ color: sColor }} />
-              <span className="stat-label">{label}</span>
-            </div>
-            <div className="stat-value" style={{ color: sColor }}>
-              {value}
-              <span className="text-xs font-normal text-[var(--color-text-muted)] whitespace-nowrap">
-                {unit}
+          <div key={label} className="p-3 rounded-xl border border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.04)] transition-colors">
+            <div className="flex items-center gap-1.5 mb-2 opacity-80">
+              <IconComponent size={14} style={{ color: sColor }} />
+              <span className="text-[10px] uppercase font-semibold tracking-wider text-[var(--color-text-muted)]">
+                {label}
               </span>
+            </div>
+            <div className="flex items-baseline gap-1" style={{ color: sColor }}>
+              <span className="text-2xl font-bold tracking-tight">
+                {value}
+              </span>
+              {value !== "N/A" && unit && (
+                <span className="text-xs font-medium text-[var(--color-text-muted)]">
+                  {unit}
+                </span>
+              )}
             </div>
           </div>
         ))}
       </div>
 
       {/* Simulated Replacement Value */}
-      <div className="glass-card p-3 space-y-3 mt-4">
+      <div className="glass-card p-4 space-y-4 mt-4 bg-[rgba(255,255,255,0.02)]">
         <div>
-          <p className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium mb-1.5">
+          <p className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] font-bold mb-2">
             Simulated Replacement Value
           </p>
-          <p className="text-[10px] text-[var(--color-text-secondary)] leading-relaxed">
+          <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
             If this line were built today using our scenario engine, here is its estimated impact and cost to construct.
           </p>
         </div>
 
         <div className="grid grid-cols-2 gap-2">
           {simulatedStats.map(({ icon: IconComponent, label, value, unit, color: sColor }) => (
-            <div key={label} className="stat-card bg-[var(--color-bg-base)]">
-              <div className="flex items-center gap-1.5 mb-1">
-                <IconComponent size={12} style={{ color: sColor }} />
-                <span className="stat-label">{label}</span>
-              </div>
-              <div className="stat-value" style={{ color: sColor, fontSize: '16px' }}>
-                {value}
-                <span className="text-[10px] font-normal text-[var(--color-text-muted)] whitespace-nowrap">
-                  {unit}
+            <div key={label} className="p-3 rounded-xl border border-[rgba(255,255,255,0.05)] bg-[rgba(0,0,0,0.2)]">
+              <div className="flex items-center gap-1.5 mb-2 opacity-80">
+                <IconComponent size={14} style={{ color: sColor }} />
+                <span className="text-[10px] uppercase font-semibold tracking-wider text-[var(--color-text-muted)]">
+                  {label}
                 </span>
+              </div>
+              <div className="flex items-baseline gap-1" style={{ color: sColor }}>
+                <span className="text-lg font-bold tracking-tight">
+                  {value}
+                </span>
+                {unit && (
+                  <span className="text-[10px] font-medium text-[var(--color-text-muted)]">
+                    {unit}
+                  </span>
+                )}
               </div>
             </div>
           ))}

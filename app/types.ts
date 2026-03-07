@@ -91,7 +91,9 @@ export interface HotspotCluster {
 
 export interface LayerVisibility {
   needScore: boolean;
-  transitLines: boolean;
+  busLines: boolean;
+  lrtLines: boolean;
+  subwayLines: boolean;
   trafficHotspots: boolean;
   zoneLabels: boolean;
 }
