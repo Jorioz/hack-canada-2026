@@ -29,3 +29,16 @@ def get_density_by_neighbourhood(neighbourhood: str):
     result = match[["neighbourhood", "population", "area_km2", "density_per_km2"]].to_dict(orient="records")[0]
     logger.info("GET /api/py/density/%s success", neighbourhood)
     return result
+
+import json
+
+@app.get("/api/py/transit-lines")
+def get_transit_lines():
+    try:
+        with open("app/data/ttc_routes.json", "r", encoding="utf-8") as f:
+            routes = json.load(f)
+        logger.info("GET /api/py/transit-lines success: returned %d routes", len(routes))
+        return routes
+    except Exception as e:
+        logger.error(f"Failed to load transit lines: {e}")
+        return {"error": "Internal Server Error"}
