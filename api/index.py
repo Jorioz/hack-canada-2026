@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 import logging
 from api.data_service import DataService
@@ -40,6 +40,26 @@ def get_traffic():
 def get_traffic_geojson():
     logger.info("GET /api/py/traffic/geojson success: returned %d features", len(data.traffic_geojson["features"]))
     return JSONResponse(content=data.traffic_geojson)
+
+@app.get("/api/py/traffic/intersections")
+def get_traffic_intersections(
+    min_total_vehicle: int = Query(default=30000, ge=0),
+    limit: int | None = Query(default=None, ge=1),
+):
+    result = [
+        item
+        for item in data.traffic_intersections
+        if item["total_vehicle"] >= min_total_vehicle
+    ]
+    if limit is not None:
+        result = result[:limit]
+
+    logger.info(
+        "GET /api/py/traffic/intersections success: returned %d intersections (min_total_vehicle=%d)",
+        len(result),
+        min_total_vehicle,
+    )
+    return result
 
 @app.get("/api/py/traffic/{neighbourhood}")
 def get_traffic_by_neighbourhood(neighbourhood: str):

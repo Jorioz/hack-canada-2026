@@ -74,5 +74,32 @@ def load_traffic_geojson() -> dict:
     return {"type": "FeatureCollection", "features": features}
 
 
+def load_top_intersections(min_total_vehicle: int = 0, limit: int | None = None) -> list[dict]:
+    """Return intersections filtered by minimum vehicle count, deduplicated by location."""
+    df = pd.read_csv(TRAFFIC_CSV)
+
+    # Keep the most recent count per unique location
+    df = df.sort_values('count_date', ascending=False).drop_duplicates(subset='location_name', keep='first')
+
+    filtered = df[df['total_vehicle'] >= min_total_vehicle]
+    if limit is not None:
+        filtered = filtered.nlargest(limit, 'total_vehicle')
+
+    records = []
+    for _, row in filtered.iterrows():
+        records.append({
+            "location_name": row["location_name"],
+            "latitude": round(float(row["latitude"]), 6),
+            "longitude": round(float(row["longitude"]), 6),
+            "total_vehicle": int(row["total_vehicle"]),
+            "total_bike": int(row["total_bike"]) if pd.notna(row["total_bike"]) else 0,
+            "total_pedestrian": int(row["total_pedestrian"]) if pd.notna(row["total_pedestrian"]) else 0,
+            "am_peak_vehicle": int(row["am_peak_vehicle"]) if pd.notna(row["am_peak_vehicle"]) else 0,
+            "pm_peak_vehicle": int(row["pm_peak_vehicle"]) if pd.notna(row["pm_peak_vehicle"]) else 0,
+        })
+
+    return records
+
+
 if __name__ == "__main__":
     print(load_traffic_by_neighbourhood().to_string())
