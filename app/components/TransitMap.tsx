@@ -19,6 +19,14 @@ function getDensityColor(ratio: number): string {
     return "#ef4444"; // red
 }
 
+function getTrafficColor(ratio: number): string {
+    // Low traffic (green) -> Medium (yellow) -> High traffic (red)
+    if (ratio < 0.25) return "#22c55e";
+    if (ratio < 0.5) return "#eab308";
+    if (ratio < 0.75) return "#f97316";
+    return "#ef4444";
+}
+
 interface DensityGeoJSON {
     type: "FeatureCollection";
     features: {
@@ -31,6 +39,17 @@ interface DensityGeoJSON {
             density_per_km2: number;
         };
     }[];
+}
+
+interface TrafficIntersection {
+    location_name: string;
+    latitude: number;
+    longitude: number;
+    total_vehicle: number;
+    total_bike: number;
+    total_pedestrian: number;
+    am_peak_vehicle: number;
+    pm_peak_vehicle: number;
 }
 
 interface TransitMapProps {
@@ -49,6 +68,7 @@ interface TransitMapProps {
     center: [number, number];
     zoom: number;
     densityGeoJSON: DensityGeoJSON | null;
+    trafficIntersections: TrafficIntersection[];
 }
 
 export default function TransitMap({
@@ -67,11 +87,13 @@ export default function TransitMap({
     center,
     zoom,
     densityGeoJSON,
+    trafficIntersections,
 }: TransitMapProps) {
     const mapRef = useRef<any>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const layerGroupsRef = useRef<{
         density: any;
+        traffic: any;
         transitLines: any;
         stations: any;
         hotspots: any;
@@ -79,6 +101,7 @@ export default function TransitMap({
         scenarios: any;
     }>({
         density: null,
+        traffic: null,
         transitLines: null,
         stations: null,
         hotspots: null,
@@ -147,6 +170,7 @@ export default function TransitMap({
             // Create layer groups
             layerGroupsRef.current = {
                 density: L.layerGroup().addTo(map),
+                traffic: L.layerGroup().addTo(map),
                 transitLines: L.layerGroup().addTo(map),
                 stations: L.layerGroup().addTo(map),
                 hotspots: L.layerGroup().addTo(map),
@@ -236,6 +260,54 @@ export default function TransitMap({
 
         updateDensity();
     }, [densityGeoJSON, layers.needScore, zones, onZoneClick]);
+
+    // Update traffic intersections
+    useEffect(() => {
+        const lg = layerGroupsRef.current.traffic;
+        if (!lg || !mapRef.current) return;
+
+        const updateTraffic = async () => {
+            const L = (await import("leaflet")).default;
+            lg.clearLayers();
+
+            if (!layers.trafficHotspots || trafficIntersections.length === 0)
+                return;
+
+            const maxVehicles = Math.max(
+                ...trafficIntersections.map((i) => i.total_vehicle),
+            );
+
+            trafficIntersections.forEach((intersection) => {
+                const ratio = intersection.total_vehicle / maxVehicles;
+                // Scale radius 5-16 based on traffic volume
+                const radius = 5 + ratio * 11;
+
+                const marker = L.circleMarker(
+                    [intersection.latitude, intersection.longitude],
+                    {
+                        radius,
+                        fillColor: getTrafficColor(ratio),
+                        fillOpacity: 0.7,
+                        color: "#fff",
+                        weight: 1,
+                    },
+                );
+
+                marker.bindPopup(
+                    `<div style="color:#1e293b;font-size:13px;line-height:1.5">
+                        <strong style="font-size:14px">${intersection.location_name}</strong><br/>
+                        Daily Vehicles: <strong>${intersection.total_vehicle.toLocaleString()}</strong><br/>
+                        AM Peak: ${intersection.am_peak_vehicle.toLocaleString()} &nbsp;|&nbsp; PM Peak: ${intersection.pm_peak_vehicle.toLocaleString()}<br/>
+                        Bikes: ${intersection.total_bike.toLocaleString()} &nbsp;|&nbsp; Pedestrians: ${intersection.total_pedestrian.toLocaleString()}
+                    </div>`,
+                );
+
+                marker.addTo(lg);
+            });
+        };
+
+        updateTraffic();
+    }, [trafficIntersections, layers.trafficHotspots]);
 
     // Update transit lines
     useEffect(() => {
