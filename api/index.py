@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 import logging
 from api.data_service import DataService
@@ -30,15 +30,42 @@ def get_density_by_neighbourhood(neighbourhood: str):
     logger.info("GET /api/py/density/%s success", neighbourhood)
     return result
 
-import json
+@app.get("/api/py/traffic")
+def get_traffic():
+    result = data.traffic.to_dict(orient="records")
+    logger.info("GET /api/py/traffic success: returned %d neighbourhoods", len(result))
+    return result
 
-@app.get("/api/py/transit-lines")
-def get_transit_lines():
-    try:
-        with open("app/data/ttc_routes.json", "r", encoding="utf-8") as f:
-            routes = json.load(f)
-        logger.info("GET /api/py/transit-lines success: returned %d routes", len(routes))
-        return routes
-    except Exception as e:
-        logger.error(f"Failed to load transit lines: {e}")
-        return {"error": "Internal Server Error"}
+@app.get("/api/py/traffic/geojson")
+def get_traffic_geojson():
+    logger.info("GET /api/py/traffic/geojson success: returned %d features", len(data.traffic_geojson["features"]))
+    return JSONResponse(content=data.traffic_geojson)
+
+@app.get("/api/py/traffic/intersections")
+def get_traffic_intersections(
+    min_total_vehicle: int = Query(default=30000, ge=0),
+    limit: int | None = Query(default=None, ge=1),
+):
+    result = [
+        item
+        for item in data.traffic_intersections
+        if item["total_vehicle"] >= min_total_vehicle
+    ]
+    if limit is not None:
+        result = result[:limit]
+
+    logger.info(
+        "GET /api/py/traffic/intersections success: returned %d intersections (min_total_vehicle=%d)",
+        len(result),
+        min_total_vehicle,
+    )
+    return result
+
+@app.get("/api/py/traffic/{neighbourhood}")
+def get_traffic_by_neighbourhood(neighbourhood: str):
+    match = data.traffic[data.traffic["neighbourhood"].str.lower() == neighbourhood.lower()]
+    if match.empty:
+        return {"error": f"Neighbourhood '{neighbourhood}' not found"}
+    result = match.to_dict(orient="records")[0]
+    logger.info("GET /api/py/traffic/%s success", neighbourhood)
+    return result

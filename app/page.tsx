@@ -29,6 +29,17 @@ interface DensityGeoJSON {
     }[];
 }
 
+interface TrafficIntersection {
+    location_name: string;
+    latitude: number;
+    longitude: number;
+    total_vehicle: number;
+    total_bike: number;
+    total_pedestrian: number;
+    am_peak_vehicle: number;
+    pm_peak_vehicle: number;
+}
+
 export default function Home() {
     // Compute Need Scores for all zones
     const [zones, setZones] = useState<Zone[]>([]);
@@ -70,6 +81,12 @@ export default function Home() {
         null,
     );
 
+    // Traffic intersections from API
+    const [trafficIntersections, setTrafficIntersections] = useState<
+        TrafficIntersection[]
+    >([]);
+    const [trafficThreshold, setTrafficThreshold] = useState(30000);
+
     // Fetch density GeoJSON from API
     useEffect(() => {
         fetch("/api/py/density/geojson")
@@ -80,19 +97,19 @@ export default function Home() {
             );
     }, []);
 
-    // Fetch real transit lines from backend
+    // Fetch traffic intersections from API using a minimum vehicle threshold
     useEffect(() => {
-        fetch("/api/py/transit-lines")
+        fetch(
+            `/api/py/traffic/intersections?min_total_vehicle=${trafficThreshold}`,
+        )
             .then((res) => res.json())
-            .then((data) => {
-                if (Array.isArray(data) && data.length > 0) {
-                    setTransitLines(data);
-                }
-            })
+            .then((data: TrafficIntersection[]) =>
+                setTrafficIntersections(data),
+            )
             .catch((err) =>
-                console.error("Failed to fetch GTFS transit lines:", err)
+                console.error("Failed to fetch traffic intersections:", err),
             );
-    }, []);
+    }, [trafficThreshold]);
 
     const handleZoneClick = useCallback((zone: Zone) => {
         setSelectedLine(null);
@@ -252,7 +269,31 @@ export default function Home() {
                     center={mapCenter}
                     zoom={mapZoom}
                     densityGeoJSON={densityGeoJSON}
+                    trafficIntersections={trafficIntersections}
                 />
+
+                <div className="absolute top-4 right-4 z-[1000] glass-panel px-4 py-3 min-w-[280px]">
+                    <div className="text-xs text-[var(--color-text-muted)] mb-2">
+                        Traffic Filter
+                    </div>
+                    <label className="text-sm text-[var(--color-text-primary)] block mb-2">
+                        Min daily vehicles: {trafficThreshold.toLocaleString()}
+                    </label>
+                    <input
+                        type="range"
+                        min={5000}
+                        max={70000}
+                        step={1000}
+                        value={trafficThreshold}
+                        onChange={(e) =>
+                            setTrafficThreshold(Number(e.target.value))
+                        }
+                        className="w-full"
+                    />
+                    <div className="mt-2 text-xs text-[var(--color-text-muted)]">
+                        Showing {trafficIntersections.length} intersections
+                    </div>
+                </div>
 
                 {/* Drawing Mode Overlay */}
                 {isDrawing && (
