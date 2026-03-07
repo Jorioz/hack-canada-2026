@@ -38,5 +38,4 @@ next-env.d.ts
 __pycache__/
 .venv
 
-# Ignore frontend massive data folders
-app/data/*/
+/app/data/*/
