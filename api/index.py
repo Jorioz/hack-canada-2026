@@ -1,5 +1,4 @@
 from fastapi import FastAPI
-<<<<<<< HEAD
 import logging
 from api.data_service import DataService
 
@@ -24,12 +23,3 @@ def get_density_by_neighbourhood(neighbourhood: str):
     result = match[["neighbourhood", "population", "area_km2", "density_per_km2"]].to_dict(orient="records")[0]
     logger.info("GET /api/py/density/%s success", neighbourhood)
     return result
-=======
-
-### Create FastAPI instance with custom docs and openapi url
-app = FastAPI(docs_url="/api/py/docs", openapi_url="/api/py/openapi.json")
-
-@app.get("/api/py/helloFastApi")
-def hello_fast_api():
-    return {"message": "Hello from FastAPI"}
->>>>>>> master
