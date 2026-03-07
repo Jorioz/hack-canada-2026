@@ -36,4 +36,8 @@ next-env.d.ts
 
 # python
 __pycache__/
+<<<<<<< HEAD
 .venv
+=======
+venv
+>>>>>>> master
