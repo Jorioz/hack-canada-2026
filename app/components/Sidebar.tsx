@@ -159,7 +159,7 @@ export default function Sidebar({
         </div>
         <div className="flex flex-wrap gap-1.5">
           {[
-            { key: "needScore" as const, label: "Need Score" },
+            { key: "needScore" as const, label: "Population Density" },
             { key: "subwayLines" as const, label: "Subways" },
             { key: "lrtLines" as const, label: "LRTs" },
             { key: "busLines" as const, label: "Buses" },
