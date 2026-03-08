@@ -48,6 +48,16 @@ body {
   background: var(--color-bg-primary) !important;
 }
 
+/* Scenario marching-ants animation */
+@keyframes scenario-dash {
+  to {
+    stroke-dashoffset: -40;
+  }
+}
+.scenario-march {
+  animation: scenario-dash 1.2s linear infinite;
+}
+
 .leaflet-control-zoom a {
   background: var(--glass-bg) !important;
   color: var(--color-text-primary) !important;

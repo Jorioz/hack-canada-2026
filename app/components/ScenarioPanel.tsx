@@ -206,132 +206,155 @@ export default function ScenarioPanel({
             Saved Scenarios ({scenarios.length})
           </p>
           <div className="space-y-3">
-            {scenarios.map((scenario) => (
-              <div key={scenario.id} className="glass-card p-3 space-y-3">
-                {/* Scenario Header */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {scenario.mode === "subway" && (
-                      <TrainFront size={14} color={SCENARIO_MODE_COLORS.subway} />
-                    )}
-                    {scenario.mode === "surface_lrt" && (
-                      <TramFront size={14} color={SCENARIO_MODE_COLORS.surface_lrt} />
-                    )}
-                    {scenario.mode === "enhanced_bus" && (
-                      <Bus size={14} color={SCENARIO_MODE_COLORS.enhanced_bus} />
-                    )}
-                    <span
-                      className={`text-xs font-semibold ${
-                        scenario.visible ? "text-[var(--color-text-primary)]" : "text-[var(--color-text-muted)] line-through"
-                      }`}
-                    >
-                      {scenario.name}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => onToggleScenario(scenario.id)}
-                      className="p-1 rounded hover:bg-[rgba(6,182,212,0.15)] transition"
-                      title={scenario.visible ? "Hide scenario" : "Show scenario"}
-                    >
-                      {scenario.visible ? (
-                        <Eye size={12} className="text-[var(--color-accent-cyan)]" />
-                      ) : (
-                        <EyeOff size={12} className="text-[var(--color-text-muted)]" />
-                      )}
-                    </button>
-                    <button
-                      onClick={() => onDeleteScenario(scenario.id)}
-                      className="p-1 rounded hover:bg-[rgba(239,68,68,0.15)] transition"
-                      title="Delete scenario"
-                    >
-                      <Trash2
-                        size={12}
-                        className="text-[var(--color-text-muted)] hover:text-[var(--color-accent-red)]"
-                      />
-                    </button>
-                  </div>
-                </div>
+            {scenarios.map((scenario) => {
+              const modeColor = SCENARIO_MODE_COLORS[scenario.mode] || "#3b82f6";
+              return (
+              <div
+                key={scenario.id}
+                className="relative rounded-lg overflow-hidden"
+                style={{
+                  background: `linear-gradient(135deg, ${modeColor}12 0%, rgba(15,23,42,0.9) 60%)`,
+                  border: `1px solid ${modeColor}40`,
+                }}
+              >
+                {/* Colored accent bar */}
+                <div
+                  className="absolute left-0 top-0 bottom-0 w-1"
+                  style={{ background: modeColor }}
+                />
 
-                {/* Results (Dimmed if hidden) */}
-                {scenario.result && (
-                  <div className={scenario.visible ? "" : "opacity-40 grayscale pointer-events-none"}>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="stat-card">
-                        <div className="flex items-center gap-1 mb-0.5">
-                          <DollarSign size={10} className="text-[var(--color-accent-amber)]" />
-                          <span className="stat-label">Est. Cost</span>
-                        </div>
-                        <p className="text-sm font-bold text-[var(--color-accent-amber)]">
-                          {formatCost(scenario.result.costLow)}–{formatCost(scenario.result.costHigh)}
-                        </p>
+                <div className="pl-4 pr-3 py-3 space-y-3">
+                  {/* Scenario Header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-7 h-7 rounded-md flex items-center justify-center"
+                        style={{ background: `${modeColor}25` }}
+                      >
+                        {scenario.mode === "subway" && (
+                          <TrainFront size={15} color={modeColor} />
+                        )}
+                        {scenario.mode === "surface_lrt" && (
+                          <TramFront size={15} color={modeColor} />
+                        )}
+                        {scenario.mode === "enhanced_bus" && (
+                          <Bus size={15} color={modeColor} />
+                        )}
                       </div>
-                      <div className="stat-card">
-                        <div className="flex items-center gap-1 mb-0.5">
-                          <Users size={10} className="text-[var(--color-accent-cyan)]" />
-                          <span className="stat-label">Daily Riders</span>
-                        </div>
-                        <p className="text-sm font-bold text-[var(--color-accent-cyan)]">
-                          {scenario.result.dailyRidersLow.toLocaleString()}–
-                          {scenario.result.dailyRidersHigh.toLocaleString()}
-                        </p>
+                      <div>
+                        <span
+                          className={`text-sm font-bold block leading-tight ${
+                            scenario.visible ? "text-[var(--color-text-primary)]" : "text-[var(--color-text-muted)] line-through"
+                          }`}
+                        >
+                          {scenario.name}
+                        </span>
+                        <span className="text-[10px] font-medium" style={{ color: modeColor }}>
+                          {scenario.mode === "subway" ? "Subway" : scenario.mode === "surface_lrt" ? "Surface LRT" : "Enhanced Bus"}
+                        </span>
                       </div>
-                      <div className="stat-card">
-                        <div className="flex items-center gap-1 mb-0.5">
-                          <Car size={10} className="text-[var(--color-accent-green)]" />
-                          <span className="stat-label">Cars Removed</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => onToggleScenario(scenario.id)}
+                        className="p-1.5 rounded-md transition"
+                        style={{ background: scenario.visible ? `${modeColor}15` : "transparent" }}
+                        title={scenario.visible ? "Hide scenario" : "Show scenario"}
+                      >
+                        {scenario.visible ? (
+                          <Eye size={13} color={modeColor} />
+                        ) : (
+                          <EyeOff size={13} className="text-[var(--color-text-muted)]" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => onDeleteScenario(scenario.id)}
+                        className="p-1.5 rounded-md hover:bg-[rgba(239,68,68,0.15)] transition"
+                        title="Delete scenario"
+                      >
+                        <Trash2
+                          size={13}
+                          className="text-[var(--color-text-muted)] hover:text-[var(--color-accent-red)]"
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Results */}
+                  {scenario.result && (
+                    <div className={scenario.visible ? "" : "opacity-40 grayscale pointer-events-none"}>
+                      {/* Key metrics row */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-md p-2" style={{ background: "rgba(0,0,0,0.25)" }}>
+                          <div className="flex items-center gap-1 mb-1">
+                            <DollarSign size={11} className="text-[var(--color-accent-amber)]" />
+                            <span className="text-[9px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium">Est. Cost</span>
+                          </div>
+                          <p className="text-base font-black text-[var(--color-accent-amber)]">
+                            {formatCost(scenario.result.costLow)}–{formatCost(scenario.result.costHigh)}
+                          </p>
                         </div>
-                        <p className="text-sm font-bold text-[var(--color-accent-green)]">
-                          {scenario.result.carTripsRemovedLow.toLocaleString()}–
-                          {scenario.result.carTripsRemovedHigh.toLocaleString()}
-                          <span className="text-[10px] font-normal text-[var(--color-text-muted)]">
-                            /day
+                        <div className="rounded-md p-2" style={{ background: "rgba(0,0,0,0.25)" }}>
+                          <div className="flex items-center gap-1 mb-1">
+                            <Users size={11} className="text-[var(--color-accent-cyan)]" />
+                            <span className="text-[9px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium">Daily Riders</span>
+                          </div>
+                          <p className="text-base font-black text-[var(--color-accent-cyan)]">
+                            {scenario.result.dailyRidersLow.toLocaleString()}–{scenario.result.dailyRidersHigh.toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="rounded-md p-2" style={{ background: "rgba(0,0,0,0.25)" }}>
+                          <div className="flex items-center gap-1 mb-1">
+                            <Car size={11} className="text-[var(--color-accent-green)]" />
+                            <span className="text-[9px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium">Cars Removed</span>
+                          </div>
+                          <p className="text-base font-black text-[var(--color-accent-green)]">
+                            {scenario.result.carTripsRemovedLow.toLocaleString()}–{scenario.result.carTripsRemovedHigh.toLocaleString()}
+                            <span className="text-[9px] font-normal text-[var(--color-text-muted)]">/day</span>
+                          </p>
+                        </div>
+                        <div className="rounded-md p-2" style={{ background: "rgba(0,0,0,0.25)" }}>
+                          <div className="flex items-center gap-1 mb-1">
+                            <BarChart3 size={11} className="text-[var(--color-accent-blue)]" />
+                            <span className="text-[9px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium">Annual Rev</span>
+                          </div>
+                          <p className="text-base font-black text-[var(--color-accent-blue)]">
+                            {formatRevenue(scenario.result.annualFareRevenue)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Bottom info bar */}
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-[rgba(255,255,255,0.06)]">
+                        <div className="flex items-center gap-3 text-[10px] text-[var(--color-text-muted)]">
+                          <span className="flex items-center gap-1">
+                            <Ruler size={10} /> {scenario.result.lineLengthKm} km
                           </span>
-                        </p>
-                      </div>
-                      <div className="stat-card">
-                        <div className="flex items-center gap-1 mb-0.5">
-                          <BarChart3 size={10} className="text-[var(--color-accent-blue)]" />
-                          <span className="stat-label">Annual Revenue</span>
+                          <span className="flex items-center gap-1">
+                            <MapPin size={10} /> {scenario.result.numStations} stn
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock size={10} /> {scenario.result.timelineYearsLow}–{scenario.result.timelineYearsHigh} yr
+                          </span>
                         </div>
-                        <p className="text-sm font-bold text-[var(--color-accent-blue)]">
-                          {formatRevenue(scenario.result.annualFareRevenue)}
-                        </p>
                       </div>
-                    </div>
 
-                    {/* Additional Stats */}
-                    <div className="flex items-center gap-4 text-[10px] text-[var(--color-text-muted)] pt-1 border-t border-[var(--color-border)]">
-                      <span className="flex items-center gap-1">
-                        <Ruler size={10} />
-                        {scenario.result.lineLengthKm} km
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <MapPin size={10} />
-                        {scenario.result.numStations} stations
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock size={10} />
-                        {scenario.result.timelineYearsLow}–
-                        {scenario.result.timelineYearsHigh} yrs
-                      </span>
-                    </div>
+                      {/* Served area */}
+                      <div className="text-[10px] text-[var(--color-text-muted)] mt-1">
+                        Serves ~{scenario.result.populationServed.toLocaleString()} residents
+                        and ~{scenario.result.jobsServed.toLocaleString()} jobs within 800m
+                      </div>
 
-                    {/* Served area */}
-                    <div className="text-[10px] text-[var(--color-text-muted)]">
-                      Serves ~{scenario.result.populationServed.toLocaleString()} residents
-                      and ~{scenario.result.jobsServed.toLocaleString()} jobs within 800m
+                      {/* Disclaimer */}
+                      <p className="text-[9px] text-[var(--color-text-muted)] italic mt-1 opacity-60">
+                        ⚠️ Screening-level estimates only
+                      </p>
                     </div>
-
-                    {/* Disclaimer */}
-                    <p className="text-[9px] text-[var(--color-text-muted)] italic">
-                      ⚠️ Screening-level estimates only. Based on benchmark costs from
-                      real Toronto projects and simplified capture rate assumptions.
-                    </p>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

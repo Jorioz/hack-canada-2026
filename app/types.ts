@@ -60,7 +60,7 @@ export interface Scenario {
 
 // Shared mode colors — highly distinct
 export const SCENARIO_MODE_COLORS: Record<ScenarioMode, string> = {
-  subway: "#FFCD00",       // TTC Yellow
+  subway: "#c6da14",       // TTC Yellow
   surface_lrt: "#a855f7",  // Purple
   enhanced_bus: "#3b82f6",  // Blue
 };

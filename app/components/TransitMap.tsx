@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import {
     TransitLine,
     Scenario,
@@ -91,6 +91,7 @@ export default function TransitMap({
 }: TransitMapProps) {
     const mapRef = useRef<any>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
+    const [mapReady, setMapReady] = useState(false);
     const layerGroupsRef = useRef<{
         density: any;
         traffic: any;
@@ -167,6 +168,14 @@ export default function TransitMap({
                 },
             ).addTo(map);
 
+            // Custom pane for drawing (above overlay so it stays clickable)
+            const drawingPane = map.createPane('drawingPane');
+            drawingPane.style.zIndex = '450';
+
+            // Custom pane for scenarios (above all data layers)
+            const scenarioPane = map.createPane('scenarioPane');
+            scenarioPane.style.zIndex = '460';
+
             // Create layer groups
             layerGroupsRef.current = {
                 density: L.layerGroup().addTo(map),
@@ -184,6 +193,7 @@ export default function TransitMap({
             });
 
             mapRef.current = map;
+            setMapReady(true);
         };
 
         initMap();
@@ -259,7 +269,7 @@ export default function TransitMap({
         };
 
         updateDensity();
-    }, [densityGeoJSON, layers.needScore, zones, onZoneClick]);
+    }, [densityGeoJSON, layers.needScore, zones, onZoneClick, mapReady]);
 
     // Update traffic intersections
     useEffect(() => {
@@ -307,7 +317,7 @@ export default function TransitMap({
         };
 
         updateTraffic();
-    }, [trafficIntersections, layers.trafficHotspots]);
+    }, [trafficIntersections, layers.trafficHotspots, mapReady]);
 
     // Update transit lines
     useEffect(() => {
@@ -391,7 +401,7 @@ export default function TransitMap({
         };
 
         updateLines();
-    }, [transitLines, layers.subwayLines, layers.lrtLines, layers.busLines]);
+    }, [transitLines, layers.subwayLines, layers.lrtLines, layers.busLines, mapReady]);
 
     // Update hotspots
     useEffect(() => {
@@ -426,7 +436,7 @@ export default function TransitMap({
         };
 
         updateHotspots();
-    }, [hotspots, layers.trafficHotspots]);
+    }, [hotspots, layers.trafficHotspots, mapReady]);
 
     // Update drawing path
     useEffect(() => {
@@ -447,6 +457,7 @@ export default function TransitMap({
                     opacity: 0.85,
                     lineCap: "round",
                     lineJoin: "round",
+                    pane: "drawingPane",
                 }).addTo(lg);
             }
 
@@ -458,12 +469,13 @@ export default function TransitMap({
                     fillOpacity: 1,
                     color: "#fff",
                     weight: 2.5,
+                    pane: "drawingPane",
                 }).addTo(lg);
             });
         };
 
         updateDrawing();
-    }, [isDrawing, drawingPath, drawingWaypoints]);
+    }, [isDrawing, drawingPath, drawingWaypoints, mapReady]);
 
     // Update saved scenarios
     useEffect(() => {
@@ -479,10 +491,50 @@ export default function TransitMap({
             scenarios.forEach((scenario) => {
                 if (scenario.visible === false) return;
 
-                const polyline = L.polyline(scenario.path, {
-                    color: SCENARIO_MODE_COLORS[scenario.mode] || "#3b82f6",
+                const color = SCENARIO_MODE_COLORS[scenario.mode] || "#3b82f6";
+
+                // Outer glow layer
+                L.polyline(scenario.path, {
+                    color,
+                    weight: 12,
+                    opacity: 0.25,
+                    lineCap: "round",
+                    lineJoin: "round",
+                    pane: "scenarioPane",
+                    interactive: false,
+                }).addTo(lg);
+
+                // Mid glow layer
+                L.polyline(scenario.path, {
+                    color,
+                    weight: 7,
+                    opacity: 0.45,
+                    lineCap: "round",
+                    lineJoin: "round",
+                    pane: "scenarioPane",
+                    interactive: false,
+                }).addTo(lg);
+
+                // Core solid line
+                const coreLine = L.polyline(scenario.path, {
+                    color,
                     weight: 4,
-                    opacity: 0.8,
+                    opacity: 1,
+                    lineCap: "round",
+                    lineJoin: "round",
+                    pane: "scenarioPane",
+                });
+
+                // Animated dashed overlay (marching ants)
+                const dashLine = L.polyline(scenario.path, {
+                    color: "#fff",
+                    weight: 3,
+                    opacity: 0.6,
+                    dashArray: "8, 12",
+                    lineCap: "round",
+                    pane: "scenarioPane",
+                    interactive: false,
+                    className: "scenario-march",
                 });
 
                 let popupContent = `<div style="color:#1e293b;font-size:13px">
@@ -495,13 +547,22 @@ export default function TransitMap({
                 }
 
                 popupContent += "</div>";
-                polyline.bindPopup(popupContent);
-                polyline.addTo(lg);
+                coreLine.bindPopup(popupContent);
+                coreLine.addTo(lg);
+                dashLine.addTo(lg);
             });
         };
 
         updateScenarios();
-    }, [scenarios]);
+    }, [scenarios, mapReady]);
+
+    // Close any open popups when entering drawing mode
+    useEffect(() => {
+        if (!mapRef.current) return;
+        if (isDrawing) {
+            mapRef.current.closePopup();
+        }
+    }, [isDrawing]);
 
     return (
         <div

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import {
     Zone,
     TransitLine,
@@ -114,10 +114,22 @@ export default function Home() {
     );
 
     // Traffic intersections from API
-    const [trafficIntersections, setTrafficIntersections] = useState<
+    const [allTrafficIntersections, setAllTrafficIntersections] = useState<
         TrafficIntersection[]
     >([]);
-    const [trafficThreshold, setTrafficThreshold] = useState(30000);
+    const [trafficLevels, setTrafficLevels] = useState<Set<string>>(
+        () => new Set(["veryHigh"]),
+    );
+
+    const trafficIntersections = useMemo(() => {
+        return allTrafficIntersections.filter((i) => {
+            const v = i.total_vehicle;
+            if (v < 15000) return trafficLevels.has("low");
+            if (v < 30000) return trafficLevels.has("moderate");
+            if (v < 50000) return trafficLevels.has("high");
+            return trafficLevels.has("veryHigh");
+        });
+    }, [allTrafficIntersections, trafficLevels]);
 
     // Fetch density GeoJSON from API
     useEffect(() => {
@@ -189,19 +201,26 @@ export default function Home() {
             );
     }, []);
 
-    // Fetch traffic intersections from API using a minimum vehicle threshold
+    // Fetch all traffic intersections once
     useEffect(() => {
-        fetch(
-            `/api/py/traffic/intersections?min_total_vehicle=${trafficThreshold}`,
-        )
+        fetch("/api/py/traffic/intersections?min_total_vehicle=5000")
             .then((res) => res.json())
             .then((data: TrafficIntersection[]) =>
-                setTrafficIntersections(data),
+                setAllTrafficIntersections(data),
             )
             .catch((err) =>
                 console.error("Failed to fetch traffic intersections:", err),
             );
-    }, [trafficThreshold]);
+    }, []);
+
+    const toggleTrafficLevel = useCallback((level: string) => {
+        setTrafficLevels((prev) => {
+            const next = new Set(prev);
+            if (next.has(level)) next.delete(level);
+            else next.add(level);
+            return next;
+        });
+    }, []);
 
     const handleZoneClick = useCallback((zone: Zone) => {
         setSelectedLine(null);
@@ -257,15 +276,30 @@ export default function Home() {
         [isDrawing, isRouting, drawingWaypoints, scenarioMode],
     );
 
+    const savedLayersRef = useRef<LayerVisibility | null>(null);
+
     const handleStartDrawing = useCallback(() => {
+        savedLayersRef.current = { ...layers };
+        setLayers({
+            needScore: false,
+            busLines: false,
+            lrtLines: false,
+            subwayLines: false,
+            trafficHotspots: false,
+            zoneLabels: false,
+        });
         setIsDrawing(true);
         setDrawingWaypoints([]);
         setDrawingPath([]);
-    }, []);
+    }, [layers]);
 
     const handleFinishDrawing = useCallback(() => {
         if (drawingPath.length < 2) return;
         setIsDrawing(false);
+        if (savedLayersRef.current) {
+            setLayers(savedLayersRef.current);
+            savedLayersRef.current = null;
+        }
 
         const result = calculateScenario(
             drawingPath,
@@ -293,6 +327,10 @@ export default function Home() {
 
     const handleCancelDrawing = useCallback(() => {
         setIsDrawing(false);
+        if (savedLayersRef.current) {
+            setLayers(savedLayersRef.current);
+            savedLayersRef.current = null;
+        }
         setDrawingWaypoints([]);
         setDrawingPath([]);
     }, []);
@@ -366,24 +404,35 @@ export default function Home() {
                     trafficIntersections={trafficIntersections}
                 />
 
-                <div className="absolute top-4 right-4 z-[1000] glass-panel px-4 py-3 min-w-[280px]">
+                <div className="absolute bottom-6 right-4 z-[1000] glass-panel px-4 py-3">
                     <div className="text-xs text-[var(--color-text-muted)] mb-2">
                         Traffic Filter
                     </div>
-                    <label className="text-sm text-[var(--color-text-primary)] block mb-2">
-                        Min daily vehicles: {trafficThreshold.toLocaleString()}
-                    </label>
-                    <input
-                        type="range"
-                        min={5000}
-                        max={70000}
-                        step={1000}
-                        value={trafficThreshold}
-                        onChange={(e) =>
-                            setTrafficThreshold(Number(e.target.value))
-                        }
-                        className="w-full"
-                    />
+                    <div className="flex gap-2">
+                        {[
+                            { key: "low", label: "Low", color: "#22c55e", border: "#16a34a" },
+                            { key: "moderate", label: "Med", color: "#eab308", border: "#ca8a04" },
+                            { key: "high", label: "High", color: "#f97316", border: "#ea580c" },
+                            { key: "veryHigh", label: "Critical", color: "#ef4444", border: "#dc2626" },
+                        ].map((lvl) => {
+                            const active = trafficLevels.has(lvl.key);
+                            return (
+                                <button
+                                    key={lvl.key}
+                                    onClick={() => toggleTrafficLevel(lvl.key)}
+                                    className="px-3 py-1.5 rounded text-xs font-medium transition-all"
+                                    style={{
+                                        backgroundColor: active ? lvl.color : "transparent",
+                                        color: active ? "#000" : lvl.color,
+                                        border: `1.5px solid ${active ? lvl.border : lvl.color + "66"}`,
+                                        opacity: active ? 1 : 0.5,
+                                    }}
+                                >
+                                    {lvl.label}
+                                </button>
+                            );
+                        })}
+                    </div>
                     <div className="mt-2 text-xs text-[var(--color-text-muted)]">
                         Showing {trafficIntersections.length} intersections
                     </div>
