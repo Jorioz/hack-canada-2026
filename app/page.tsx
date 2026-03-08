@@ -42,6 +42,17 @@ interface TrafficIntersection {
     pm_peak_vehicle: number;
 }
 
+interface RouteCandidateResponse {
+    waypoints_lat_lng: [number, number][];
+    candidate_count: number;
+    candidates: {
+        rank: number;
+        path_lat_lng: [number, number][];
+        candidate_score: number;
+        reason: string;
+    }[];
+}
+
 export default function Home() {
     // Compute Need Scores for all zones
     const [zones, setZones] = useState<Zone[]>([]);
@@ -74,11 +85,11 @@ export default function Home() {
 
     // Hotspot clusters
     const [hotspots, setHotspots] = useState<HotspotCluster[]>([]);
-    
+
     // Merge GTFS routes with hand-crafted mock lines (which have better descriptions)
     const [transitLines] = useState<TransitLine[]>(() => {
         const gtfsById = new Map<string, any>();
-        (ttcRoutesRaw as any[]).forEach(r => gtfsById.set(r.id, r));
+        (ttcRoutesRaw as any[]).forEach((r) => gtfsById.set(r.id, r));
 
         // Map mock IDs → GTFS IDs for subway lines so we can use GTFS coordinates
         const mockToGtfs: Record<string, string> = {
@@ -88,19 +99,32 @@ export default function Home() {
         };
 
         // Enhance mock lines: replace subway coordinates with accurate GTFS paths
-        const enhanced = MOCK_TRANSIT_LINES.map(line => {
+        const enhanced = MOCK_TRANSIT_LINES.map((line) => {
             const gtfsId = mockToGtfs[line.id];
             if (gtfsId && gtfsById.has(gtfsId)) {
-                return { ...line, coordinates: gtfsById.get(gtfsId).coordinates };
+                return {
+                    ...line,
+                    coordinates: gtfsById.get(gtfsId).coordinates,
+                };
             }
             return line;
         });
 
         // IDs already covered by mock lines (including GTFS equivalents)
-        const coveredGtfsIds = new Set(["1", "2", "4", "5", "504", "510", "939", "35", "52"]);
+        const coveredGtfsIds = new Set([
+            "1",
+            "2",
+            "4",
+            "5",
+            "504",
+            "510",
+            "939",
+            "35",
+            "52",
+        ]);
         const extraGtfs: TransitLine[] = (ttcRoutesRaw as any[])
-            .filter(r => !coveredGtfsIds.has(r.id))
-            .map(r => ({
+            .filter((r) => !coveredGtfsIds.has(r.id))
+            .map((r) => ({
                 ...r,
                 stations: [], // GTFS stations are all at the same point (parser bug)
             }));
@@ -125,63 +149,97 @@ export default function Home() {
             .then((res) => res.json())
             .then((data: DensityGeoJSON) => {
                 setDensityGeoJSON(data);
-                
-                // Generate Zones from GeoJSON features
-                const generatedZones: Zone[] = data.features.map((feature, index) => {
-                    const p = feature.properties;
-                    
-                    // Generate realistic mock data based on population density
-                    // E.g. high density -> high job density, higher traffic, closer to transit
-                    const isHighDensity = p.density_per_km2 > 10000;
-                    const isMediumDensity = p.density_per_km2 > 5000;
-                    
-                    const jobMultiplier = isHighDensity ? 2.5 : isMediumDensity ? 1.0 : 0.5;
-                    const jobDensity = Math.round(p.density_per_km2 * jobMultiplier);
-                    
-                    const trafficLevel = isHighDensity ? 85 - (index % 15) : isMediumDensity ? 65 - (index % 10) : 45 - (index % 10);
-                    const distanceToTransit = isHighDensity ? 0.2 + (index % 5) * 0.1 : isMediumDensity ? 1.5 + (index % 10) * 0.2 : 3.5 + (index % 15) * 0.3;
-                    
-                    const medianIncomeBase = isHighDensity ? 65000 : isMediumDensity ? 85000 : 95000;
-                    const medianIncome = medianIncomeBase + (index % 20) * 1000 - 10000;
-                    
-                    const existingRidershipBase = isHighDensity ? 35000 : isMediumDensity ? 15000 : 5000;
-                    const existingRidership = existingRidershipBase + (index % 30) * 500;
-                    
-                    // Use bbox center approximation for center point
-                    const coords = feature.geometry.coordinates[0][0];
-                    let latSum = 0, lngSum = 0;
-                    coords.forEach((coord: number[]) => {
-                        lngSum += coord[0];
-                        latSum += coord[1];
-                    });
-                    const center: [number, number] = [latSum / coords.length, lngSum / coords.length];
-                    
-                    // Simplify polygon for app state
-                    const coordinates: [number, number][] = coords.map((c: number[]) => [c[0], c[1]]);
 
-                    return {
-                        id: `zone-${index}`,
-                        name: p.neighbourhood,
-                        coordinates,
-                        center,
-                        populationDensity: Math.round(p.density_per_km2),
-                        jobDensity,
-                        trafficLevel,
-                        distanceToTransit: Number(distanceToTransit.toFixed(1)),
-                        medianIncome,
-                        growthFlag: index % 3 === 0,
-                        existingRidership,
-                        landUse: isHighDensity ? "mixed" : "residential",
-                        needScore: 0, // Computed below
-                    };
-                });
-                
+                // Generate Zones from GeoJSON features
+                const generatedZones: Zone[] = data.features.map(
+                    (feature, index) => {
+                        const p = feature.properties;
+
+                        // Generate realistic mock data based on population density
+                        // E.g. high density -> high job density, higher traffic, closer to transit
+                        const isHighDensity = p.density_per_km2 > 10000;
+                        const isMediumDensity = p.density_per_km2 > 5000;
+
+                        const jobMultiplier = isHighDensity
+                            ? 2.5
+                            : isMediumDensity
+                              ? 1.0
+                              : 0.5;
+                        const jobDensity = Math.round(
+                            p.density_per_km2 * jobMultiplier,
+                        );
+
+                        const trafficLevel = isHighDensity
+                            ? 85 - (index % 15)
+                            : isMediumDensity
+                              ? 65 - (index % 10)
+                              : 45 - (index % 10);
+                        const distanceToTransit = isHighDensity
+                            ? 0.2 + (index % 5) * 0.1
+                            : isMediumDensity
+                              ? 1.5 + (index % 10) * 0.2
+                              : 3.5 + (index % 15) * 0.3;
+
+                        const medianIncomeBase = isHighDensity
+                            ? 65000
+                            : isMediumDensity
+                              ? 85000
+                              : 95000;
+                        const medianIncome =
+                            medianIncomeBase + (index % 20) * 1000 - 10000;
+
+                        const existingRidershipBase = isHighDensity
+                            ? 35000
+                            : isMediumDensity
+                              ? 15000
+                              : 5000;
+                        const existingRidership =
+                            existingRidershipBase + (index % 30) * 500;
+
+                        // Use bbox center approximation for center point
+                        const coords = feature.geometry.coordinates[0][0];
+                        let latSum = 0,
+                            lngSum = 0;
+                        coords.forEach((coord: number[]) => {
+                            lngSum += coord[0];
+                            latSum += coord[1];
+                        });
+                        const center: [number, number] = [
+                            latSum / coords.length,
+                            lngSum / coords.length,
+                        ];
+
+                        // Simplify polygon for app state
+                        const coordinates: [number, number][] = coords.map(
+                            (c: number[]) => [c[0], c[1]],
+                        );
+
+                        return {
+                            id: `zone-${index}`,
+                            name: p.neighbourhood,
+                            coordinates,
+                            center,
+                            populationDensity: Math.round(p.density_per_km2),
+                            jobDensity,
+                            trafficLevel,
+                            distanceToTransit: Number(
+                                distanceToTransit.toFixed(1),
+                            ),
+                            medianIncome,
+                            growthFlag: index % 3 === 0,
+                            existingRidership,
+                            landUse: isHighDensity ? "mixed" : "residential",
+                            needScore: 0, // Computed below
+                        };
+                    },
+                );
+
                 // Compute need scores
-                const zonesWithScores = generatedZones.map(zone => ({
+                const zonesWithScores = generatedZones.map((zone) => ({
                     ...zone,
-                    needScore: computeNeedScore(zone, generatedZones)
+                    needScore: computeNeedScore(zone, generatedZones),
                 }));
-                
+
                 setZones(zonesWithScores);
             })
             .catch((err) =>
@@ -265,31 +323,85 @@ export default function Home() {
 
     const handleFinishDrawing = useCallback(() => {
         if (drawingPath.length < 2) return;
-        setIsDrawing(false);
 
-        const result = calculateScenario(
-            drawingPath,
-            scenarioMode,
-            stationSpacing,
-            zones,
-            transitLines,
-        );
-        const newScenario: Scenario = {
-            id: `scenario-${Date.now()}`,
-            name: `Scenario ${scenarios.length + 1}`,
-            mode: scenarioMode,
-            path: [...drawingPath],
-            stationSpacing,
-            result,
-            createdAt: new Date(),
-            visible: true,
+        const run = async () => {
+            setIsDrawing(false);
+
+            let scenarioPath: [number, number][] = [...drawingPath];
+
+            if (scenarioMode === "subway" && drawingWaypoints.length >= 2) {
+                setIsRouting(true);
+                try {
+                    const response = await fetch(
+                        "/api/py/transit/route/candidates",
+                        {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                waypoints_lat_lng: drawingWaypoints,
+                                max_candidates: 5,
+                                buffer_km: 1.0,
+                                search_km: 3.0,
+                            }),
+                        },
+                    );
+
+                    if (response.ok) {
+                        const payload: RouteCandidateResponse =
+                            await response.json();
+                        const bestCandidate = payload.candidates?.[0];
+                        if (
+                            bestCandidate &&
+                            bestCandidate.path_lat_lng.length >= 2
+                        ) {
+                            scenarioPath = bestCandidate.path_lat_lng;
+                        }
+                    }
+                } catch (error) {
+                    console.error(
+                        "Failed to fetch backend subway candidates:",
+                        error,
+                    );
+                } finally {
+                    setIsRouting(false);
+                }
+            }
+
+            const result = calculateScenario(
+                scenarioPath,
+                scenarioMode,
+                stationSpacing,
+                zones,
+                transitLines,
+            );
+
+            const newScenario: Scenario = {
+                id: `scenario-${Date.now()}`,
+                name: `Scenario ${scenarios.length + 1}`,
+                mode: scenarioMode,
+                path: scenarioPath,
+                stationSpacing,
+                result,
+                createdAt: new Date(),
+                visible: true,
+            };
+
+            setScenarios((prev) => [...prev, newScenario]);
+            setDrawingWaypoints([]);
+            setDrawingPath([]);
+            setActiveTab("scenarios");
         };
 
-        setScenarios((prev) => [...prev, newScenario]);
-        setDrawingWaypoints([]);
-        setDrawingPath([]);
-        setActiveTab("scenarios");
-    }, [drawingPath, scenarioMode, stationSpacing, zones, scenarios.length, transitLines]);
+        void run();
+    }, [
+        drawingPath,
+        drawingWaypoints,
+        scenarioMode,
+        stationSpacing,
+        zones,
+        scenarios.length,
+        transitLines,
+    ]);
 
     const handleCancelDrawing = useCallback(() => {
         setIsDrawing(false);

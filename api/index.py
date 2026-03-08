@@ -1,8 +1,13 @@
 from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 import logging
+from pydantic import BaseModel, Field
 from api.data_service import DataService
-from api.utils.transit import load_transit_benefit_scores, load_transit_benefit_geojson
+from api.utils.transit import (
+    load_transit_benefit_scores,
+    load_transit_benefit_geojson,
+    generate_subway_route_candidates,
+)
 
 app = FastAPI(docs_url="/api/py/docs", openapi_url="/api/py/openapi.json")
 
@@ -10,6 +15,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 data = DataService()
+
+
+class RouteCandidateRequest(BaseModel):
+    waypoints_lat_lng: list[tuple[float, float]] = Field(min_length=2)
+    max_candidates: int = Field(default=5, ge=1, le=20)
+    buffer_km: float = Field(default=1.0, gt=0, le=5.0)
+    search_km: float = Field(default=3.0, gt=0, le=10.0)
 
 @app.get("/api/py/density")
 def get_density():
@@ -128,3 +140,24 @@ def get_transit_benefit_geojson(
         distance_weight,
     )
     return JSONResponse(content=geojson)
+
+
+@app.post("/api/py/transit/route/candidates")
+def get_subway_route_candidates(payload: RouteCandidateRequest):
+    candidates = generate_subway_route_candidates(
+        waypoints_lat_lng=payload.waypoints_lat_lng,
+        max_candidates=payload.max_candidates,
+        buffer_km=payload.buffer_km,
+        search_km=payload.search_km,
+    )
+
+    logger.info(
+        "POST /api/py/transit/route/candidates success: %d candidates from %d waypoints",
+        len(candidates),
+        len(payload.waypoints_lat_lng),
+    )
+    return {
+        "waypoints_lat_lng": [[lat, lng] for lat, lng in payload.waypoints_lat_lng],
+        "candidate_count": len(candidates),
+        "candidates": candidates,
+    }
