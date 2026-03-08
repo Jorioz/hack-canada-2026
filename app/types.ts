@@ -95,7 +95,7 @@ export interface LayerVisibility {
   lrtLines: boolean;
   subwayLines: boolean;
   trafficHotspots: boolean;
-  zoneLabels: boolean;
+  stations: boolean;
 }
 
 export interface ScoringWeights {

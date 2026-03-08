@@ -322,13 +322,11 @@ export default function TransitMap({
     // Update transit lines
     useEffect(() => {
         const lgLines = layerGroupsRef.current.transitLines;
-        const lgStations = layerGroupsRef.current.stations;
-        if (!lgLines || !lgStations || !mapRef.current) return;
+        if (!lgLines || !mapRef.current) return;
 
         const updateLines = async () => {
             const L = (await import("leaflet")).default;
             lgLines.clearLayers();
-            lgStations.clearLayers();
 
             const visibleModes = new Set<string>();
             if (layers.subwayLines) visibleModes.add("subway");
@@ -378,8 +376,29 @@ export default function TransitMap({
                 });
 
                 polyline.addTo(lgLines);
+            });
+        };
 
-                // Stations
+        updateLines();
+    }, [transitLines, layers.subwayLines, layers.lrtLines, layers.busLines, mapReady]);
+
+    // Update stations (independent toggle)
+    useEffect(() => {
+        const lgStations = layerGroupsRef.current.stations;
+        if (!lgStations || !mapRef.current) return;
+
+        const updateStations = async () => {
+            const L = (await import("leaflet")).default;
+            lgStations.clearLayers();
+
+            if (!layers.stations) return;
+
+            const visibleModes = new Set<string>();
+            if (layers.subwayLines) visibleModes.add("subway");
+            if (layers.lrtLines) visibleModes.add("lrt");
+            if (layers.busLines) visibleModes.add("bus");
+
+            transitLines.filter(line => visibleModes.has(line.mode)).forEach((line) => {
                 line.stations.forEach((station) => {
                     const marker = L.circleMarker(station.position, {
                         radius: 4,
@@ -400,8 +419,8 @@ export default function TransitMap({
             });
         };
 
-        updateLines();
-    }, [transitLines, layers.subwayLines, layers.lrtLines, layers.busLines, mapReady]);
+        updateStations();
+    }, [transitLines, layers.stations, layers.subwayLines, layers.lrtLines, layers.busLines, mapReady]);
 
     // Update hotspots
     useEffect(() => {
