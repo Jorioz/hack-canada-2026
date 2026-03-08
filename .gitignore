@@ -43,3 +43,6 @@ app/data/*/
 
 #ignore ttc route data
 api/data/ttc/*
+
+
+.env

@@ -10,7 +10,7 @@ from shapely.geometry import LineString, Point
 from shapely.geometry.base import BaseGeometry
 
 from api.utils.density import load_neighbourhood_density
-from api.utils.traffic import load_traffic_by_neighbourhood
+from api.utils.traffic import load_traffic_by_neighbourhood, load_top_intersections
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 GTFS_DIR = DATA_DIR / "ttc"
@@ -46,6 +46,66 @@ def _project_to_32617(geometry: BaseGeometry) -> BaseGeometry:
 
 def _to_lat_lng_tuple(value: tuple[float, float] | list[float]) -> tuple[float, float]:
     return (float(value[0]), float(value[1]))
+
+
+@lru_cache(maxsize=16)
+def _get_intersections_projected_cached(min_total_vehicle: int) -> gpd.GeoDataFrame:
+    intersections = load_top_intersections(min_total_vehicle=min_total_vehicle, limit=None)
+    if not intersections:
+        return gpd.GeoDataFrame(columns=["location_name", "total_vehicle", "geometry"], geometry="geometry", crs="EPSG:32617")
+
+    frame = pd.DataFrame(intersections)
+    geometry = [Point(lon, lat) for lon, lat in zip(frame["longitude"], frame["latitude"])]
+    gdf = gpd.GeoDataFrame(frame, geometry=geometry, crs="EPSG:4326").to_crs(epsg=32617)
+    return gdf
+
+
+def _line_shape_geojson_from_lat_lng(path_lat_lng: list[tuple[float, float]]) -> dict[str, Any]:
+    return {
+        "type": "LineString",
+        "coordinates": [[lng, lat] for lat, lng in path_lat_lng],
+    }
+
+
+def _intersection_summary_for_path(
+    candidate_path: list[tuple[float, float]],
+    intersections_projected: gpd.GeoDataFrame,
+    buffer_km: float,
+) -> dict[str, Any]:
+    if len(candidate_path) < 2 or intersections_projected.empty:
+        return {
+            "count": 0,
+            "total_vehicle": 0,
+            "top_intersections": [],
+        }
+
+    line = _project_to_32617(_line_from_lat_lng(candidate_path))
+    line_buffer = line.buffer(buffer_km * 1000)
+
+    nearby = intersections_projected[intersections_projected.geometry.intersects(line_buffer)].copy()
+    if nearby.empty:
+        return {
+            "count": 0,
+            "total_vehicle": 0,
+            "top_intersections": [],
+        }
+
+    nearby = nearby.sort_values("total_vehicle", ascending=False)
+    top = [
+        {
+            "location_name": _coerce_str(row["location_name"]),
+            "latitude": round(float(row["latitude"]), 6),
+            "longitude": round(float(row["longitude"]), 6),
+            "total_vehicle": _coerce_int(row["total_vehicle"]),
+        }
+        for _, row in nearby.head(10).iterrows()
+    ]
+
+    return {
+        "count": int(len(nearby)),
+        "total_vehicle": int(float(nearby["total_vehicle"].fillna(0).sum())),
+        "top_intersections": top,
+    }
 
 
 @lru_cache(maxsize=1)
@@ -205,6 +265,124 @@ def generate_subway_route_candidates(
     for index, candidate in enumerate(ranked[:max_candidates], start=1):
         candidate["rank"] = index
     return ranked[:max_candidates]
+
+
+def build_llm_route_package(
+    waypoints_lat_lng: Sequence[tuple[float, float] | list[float]],
+    max_candidates: int = 5,
+    buffer_km: float = 1.0,
+    search_km: float = 3.0,
+    intersection_min_total_vehicle: int = 5000,
+    intersection_buffer_km: float = 0.5,
+) -> dict[str, Any]:
+    """
+    Build an LLM-ready payload to rank subway route candidates and return best line shapes.
+
+    Includes:
+    - candidate metrics,
+    - intersected neighbourhood and intersection context,
+    - strict output schema the LLM should follow.
+    """
+    normalized_waypoints = [_to_lat_lng_tuple(p) for p in waypoints_lat_lng]
+    candidates = generate_subway_route_candidates(
+        waypoints_lat_lng=normalized_waypoints,
+        max_candidates=max_candidates,
+        buffer_km=buffer_km,
+        search_km=search_km,
+    )
+
+    intersections_projected = _get_intersections_projected_cached(intersection_min_total_vehicle)
+
+    enriched_candidates = []
+    for candidate in candidates:
+        path_lat_lng = [
+            _to_lat_lng_tuple(point)
+            for point in candidate.get("path_lat_lng", [])
+        ]
+        intersection_summary = _intersection_summary_for_path(
+            candidate_path=path_lat_lng,
+            intersections_projected=intersections_projected,
+            buffer_km=intersection_buffer_km,
+        )
+
+        enriched_candidates.append(
+            {
+                "candidate_id": candidate.get("candidate_id"),
+                "rank": candidate.get("rank"),
+                "reason": candidate.get("reason"),
+                "candidate_score": candidate.get("candidate_score"),
+                "length_km": candidate.get("length_km"),
+                "avg_benefit_score": candidate.get("avg_benefit_score"),
+                "population_served": candidate.get("population_served"),
+                "traffic_served": candidate.get("traffic_served"),
+                "covered_neighbourhoods": candidate.get("covered_neighbourhoods", []),
+                "intersection_summary": intersection_summary,
+                "line_shape_geojson": _line_shape_geojson_from_lat_lng(path_lat_lng),
+                "path_lat_lng": [[lat, lng] for lat, lng in path_lat_lng],
+            }
+        )
+
+    llm_instruction = (
+        "You are a transit planning assistant. Rank and refine subway route candidates based on: "
+        "coverage of high-benefit neighbourhoods, traffic relief potential, line feasibility and directness. "
+        "Return up to 3 best routes. Preserve coordinate integrity and use candidate geometry as source of truth."
+    )
+
+    llm_output_schema = {
+        "type": "object",
+        "properties": {
+            "selected_routes": {
+                "type": "array",
+                "maxItems": 3,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "candidate_id": {"type": "string"},
+                        "rank": {"type": "integer"},
+                        "why": {"type": "string"},
+                        "line_shape_geojson": {
+                            "type": "object",
+                            "properties": {
+                                "type": {"const": "LineString"},
+                                "coordinates": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "array",
+                                        "minItems": 2,
+                                        "maxItems": 2,
+                                        "items": {"type": "number"},
+                                    },
+                                },
+                            },
+                            "required": ["type", "coordinates"],
+                        },
+                    },
+                    "required": ["candidate_id", "rank", "why", "line_shape_geojson"],
+                },
+            }
+        },
+        "required": ["selected_routes"],
+    }
+
+    return {
+        "input_waypoints_lat_lng": [[lat, lng] for lat, lng in normalized_waypoints],
+        "candidate_count": len(enriched_candidates),
+        "candidates": enriched_candidates,
+        "llm_prompt": {
+            "system": llm_instruction,
+            "user": {
+                "planning_objective": (
+                    "Propose best subway line shapes connecting the provided waypoints while maximizing neighbourhood transit benefit and relieving traffic."
+                ),
+                "constraints": {
+                    "use_candidate_geometry_only": True,
+                    "max_routes": 3,
+                },
+                "candidates": enriched_candidates,
+            },
+            "output_schema": llm_output_schema,
+        },
+    }
 
 
 def load_rail_lines_from_gtfs() -> gpd.GeoDataFrame:
@@ -379,6 +557,120 @@ def load_transit_benefit_geojson(
         features.append(feature)
 
     return {"type": "FeatureCollection", "features": features}
+
+
+def build_route_optimization_context(
+    waypoints_lat_lng: Sequence[tuple[float, float] | list[float]],
+    search_radius_km: float = 5.0,
+    max_neighbourhoods: int = 20,
+    max_intersections: int = 15,
+    num_routes: int = 3,
+    max_candidates: int = 5,
+    buffer_km: float = 1.0,
+) -> dict[str, Any]:
+    """
+    Build comprehensive context for Gemini route optimization.
+    
+    Gathers neighbourhood scores, traffic intersections, and candidate routes
+    within the search radius of user waypoints.
+    
+    Args:
+        waypoints_lat_lng: User-selected waypoints as [lat, lng] pairs
+        search_radius_km: Radius to search for relevant neighbourhoods
+        max_neighbourhoods: Maximum neighbourhoods to include in context
+        max_intersections: Maximum traffic intersections to include
+        num_routes: Number of route options to generate
+        max_candidates: Number of pre-computed candidates to include
+        buffer_km: Buffer for candidate route scoring
+    
+    Returns:
+        Dict ready to pass to Gemini's generate_optimized_routes()
+    """
+    normalized_waypoints = [_to_lat_lng_tuple(p) for p in waypoints_lat_lng]
+    if len(normalized_waypoints) < 2:
+        raise ValueError("At least 2 waypoints are required")
+
+    # Get scored neighbourhoods
+    scored_hoods = _get_scored_neighbourhood_geometries()
+    scored_projected = scored_hoods.to_crs(epsg=32617)
+
+    # Create a buffered corridor around waypoints to find relevant neighbourhoods
+    corridor_line = _project_to_32617(_line_from_lat_lng(normalized_waypoints))
+    corridor_buffer = corridor_line.buffer(search_radius_km * 1000)
+
+    # Find neighbourhoods intersecting the corridor
+    nearby_hoods = scored_projected[scored_projected.geometry.intersects(corridor_buffer)].copy()
+    
+    # Sort by benefit score and take top N
+    nearby_hoods = nearby_hoods.sort_values("benefit_score", ascending=False).head(max_neighbourhoods)
+
+    # Build neighbourhood context for LLM
+    neighbourhood_context = []
+    for _, row in nearby_hoods.iterrows():
+        neighbourhood_context.append({
+            "name": _coerce_str(row["neighbourhood"]),
+            "benefit_score": round(float(row["benefit_score"]), 2) if pd.notna(row["benefit_score"]) else 0,
+            "population": _coerce_int(row["population"]) if pd.notna(row["population"]) else 0,
+            "density_per_km2": round(float(row["density_per_km2"]), 2) if pd.notna(row["density_per_km2"]) else 0,
+            "avg_daily_vehicles": round(float(row["avg_daily_vehicles"]), 2) if pd.notna(row["avg_daily_vehicles"]) else 0,
+            "distance_to_rail_km": round(float(row["distance_to_rail_km"]), 3) if pd.notna(row["distance_to_rail_km"]) else 0,
+            "centroid_lat": round(float(row["centroid_lat"]), 6) if pd.notna(row["centroid_lat"]) else 0,
+            "centroid_lng": round(float(row["centroid_lng"]), 6) if pd.notna(row["centroid_lng"]) else 0,
+        })
+
+    # Get high-traffic intersections near the corridor
+    intersections_projected = _get_intersections_projected_cached(min_total_vehicle=5000)
+    nearby_intersections = intersections_projected[
+        intersections_projected.geometry.intersects(corridor_buffer)
+    ].copy()
+    nearby_intersections = nearby_intersections.sort_values("total_vehicle", ascending=False).head(max_intersections)
+
+    traffic_context = [
+        {
+            "location_name": _coerce_str(row["location_name"]),
+            "latitude": round(float(row["latitude"]), 6),
+            "longitude": round(float(row["longitude"]), 6),
+            "total_vehicle": _coerce_int(row["total_vehicle"]),
+        }
+        for _, row in nearby_intersections.iterrows()
+    ]
+
+    # Generate pre-computed candidate routes for reference
+    candidates = generate_subway_route_candidates(
+        waypoints_lat_lng=normalized_waypoints,
+        max_candidates=max_candidates,
+        buffer_km=buffer_km,
+        search_km=search_radius_km,
+    )
+
+    # Simplify candidate data for LLM context
+    candidate_reference = [
+        {
+            "candidate_id": c.get("candidate_id"),
+            "reason": c.get("reason"),
+            "candidate_score": c.get("candidate_score"),
+            "length_km": c.get("length_km"),
+            "avg_benefit_score": c.get("avg_benefit_score"),
+            "population_served": c.get("population_served"),
+            "path_lat_lng": c.get("path_lat_lng"),
+            "covered_neighbourhoods": [
+                n.get("neighbourhood") for n in c.get("covered_neighbourhoods", [])
+            ],
+        }
+        for c in candidates
+    ]
+
+    return {
+        "user_waypoints": [[lat, lng] for lat, lng in normalized_waypoints],
+        "neighbourhoods": neighbourhood_context,
+        "traffic_intersections": traffic_context,
+        "existing_candidates": candidate_reference,
+        "constraints": {
+            "num_routes": num_routes,
+            "max_length_km": 30,
+            "prioritize": "balanced",
+        },
+    }
 
 
 if __name__ == "__main__":

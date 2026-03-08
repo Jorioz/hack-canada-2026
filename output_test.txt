@@ -1,0 +1,132 @@
+ ============================================================
+[1] Calling Gemini API...
+[1] 
+[1] ------------------------------------------------------------
+[1] GEMINI PROMPT (user_payload):
+[1] ------------------------------------------------------------
+[1] {
+[1]   "task": "Generate optimal transit route options connecting the provided waypoints",
+[1]   "user_waypoints": [
+[1]     [
+[1]       43.702091192127895,
+[1]       -79.50439454521985
+[1]     ],
+[1]     [
+[1]       43.679508675893636,
+[1]       -79.42920686211437
+[1]     ],
+[1]     [
+[1]       43.687698922667096,
+[1]       -79.38629151787609
+[1]     ],
+[1]     [
+[1]       43.70035437737478,
+[1]       -79.3478393694386
+[1]     ],
+[1]     [
+[1]       43.73334525385195,
+[1]       -79.35024262871595
+[1]     ]
+[1]   ],
+[1]   "neighbourhood_context": [
+[1]     {
+[1]       "name": "North Toronto",
+[1]       "benefit_score": 44.41,
+[1]       "population": 15885,
+[1]       "density_per_km2": 39511.9,
+[1]       "avg_daily_vehicles": 14337.8,
+[1]       "distance_to_rail_km": 0.016,
+[1]       "centroid_lat": 43.710254,
+[1]       "centroid_lng": -79.395075
+[1]     },
+[1]     {
+[1]       "name": "Rustic",
+[1]       "benefit_score": 42.89,
+[1]       "population": 9390,
+[1]       "density_per_km2": 4479.15,
+[1]       "avg_daily_vehicles": 25311.0,
+[1]       "distance_to_rail_km": 3.614,
+[1]       "centroid_lat": 43.711609,
+[1]       "centroid_lng": -79.498091
+[1]     },
+[1]     {
+[1]       "name": "Church-Wellesley",
+[1]       "benefit_score": 39.0,
+[1]       "population": 22320,
+[1]       "density_per_km2": 40130.51,
+[1]       "avg_daily_vehicles": 9931.9,
+[1]       "distance_to_rail_km": 0.0,
+[1]       "centroid_lat": 43.666354,
+[1]       "centroid_lng": -79.381763
+[1]     },
+[1]     {
+[1]       "name": "Kingsview Village-The Westway",
+[1]       "benefit_score": 38.15,
+[1]       "population": 22005,
+[1]       "density_per_km2": 4345.93,
+[1]       "avg_daily_vehicles": 17971.0,
+[1]       "distance_to_rail_km": 5.022,
+[1]       "centroid_lat": 43.698993,
+[1]       "centroid_lng": -79.547863
+[1]     },
+[1]     {
+[1]       "name": "Elms-Old Rexdale",
+[1]       "benefit_score": 37.23,
+[1]       "population": 9355,
+[1]       "density_per_km2": 3191.66,
+[1]       "avg_daily_vehicles": 18578.0,
+[1]       "distance_to_rail_km": 4.815,
+[1]       "centroid_lat": 43.721519,
+[1]       "centroid_lng": -79.548982
+[1]     },
+[1]     {
+[1]       "name": "Pelmo Park-Humberlea",
+[1]       "benefit_score": 34.67,
+[1]       "population": 11290,
+[1]       "density_per_km2": 2640.19,
+[1]       "avg_daily_vehicles
+[1] ... (truncated, total 10704 chars)
+[1] ------------------------------------------------------------
+[1]
+[1]
+[1] ============================================================
+[1] GEMINI RESPONSE
+[1] ============================================================
+[1] Analysis: The generated routes offer a range of options balancing directness with service to neighbourhoods identified as having high benefit scores and distance from existing rail. Route 'North Toronto Connect...
+[1] Routes generated: 5
+[1]
+[1]   Route: North Toronto Connector
+[1]     Score: 85.0
+[1]     Coords: 8 waypoints
+[1]     First: [43.702091192127895, -79.50439454521985]
+[1]     Last:  [43.73334525385195, -79.35024262871595]
+[1]     Reasoning: This route prioritizes the North Toronto neighbourhood (benefit_score: 44.41) by including a detour ...
+[1]
+[1]   Route: Flemingdon Park Link
+[1]     Score: 82.0
+[1]     Coords: 6 waypoints
+[1]     First: [43.702091192127895, -79.50439454521985]
+[1]     Last:  [43.73334525385195, -79.35024262871595]
+[1]     Reasoning: This route strategically deviates to serve Flemingdon Park (benefit_score: 29.65), which is relative...
+[1]
+[1]   Route: Direct East-West Corridor
+[1]     Score: 78.0
+[1]     Coords: 5 waypoints
+[1]     First: [43.702091192127895, -79.50439454521985]
+[1]     Last:  [43.73334525385195, -79.35024262871595]
+[1]     Reasoning: This route prioritizes efficiency and directness, following the user's waypoints with minimal detour...
+[1]
+[1]   Route: Western Expansion
+[1]     Score: 80.0
+[1]     Coords: 7 waypoints
+[1]     First: [43.702091192127895, -79.50439454521985]
+[1]     Last:  [43.73334525385195, -79.35024262871595]
+[1]     Reasoning: This route incorporates a detour to serve Rustic (benefit_score: 42.89) and Pelmo Park-Humberlea (be...
+[1]
+[1]   Route: Balanced East-West Service
+[1]     Score: 75.0
+[1]     Coords: 6 waypoints
+[1]     First: [43.702091192127895, -79.50439454521985]
+[1]     Last:  [43.73334525385195, -79.35024262871595]
+[1]     Reasoning: This route attempts to strike a balance by incorporating segments that serve areas like Rustic, Nort...
+[1] ============================================================
