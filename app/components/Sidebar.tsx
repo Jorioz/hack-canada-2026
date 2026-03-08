@@ -2,12 +2,12 @@
 
 import { Zone, TransitLine, Scenario, ScenarioMode, LayerVisibility, HotspotCluster } from "../types";
 import ExplorePanel from "./ExplorePanel";
-import HotspotPanel from "./HotspotPanel";
+import InsightsPanel from "./InsightsPanel";
 import ScenarioPanel from "./ScenarioPanel";
 import TransitLinePanel from "./TransitLinePanel";
 import {
   Map,
-  AlertTriangle,
+  Lightbulb,
   Route,
   Layers,
   ChevronLeft,
@@ -19,9 +19,11 @@ interface SidebarProps {
   zones: Zone[];
   selectedZone: Zone | null;
   selectedLine: TransitLine | null;
-  activeTab: "explore" | "hotspots" | "scenarios";
-  onTabChange: (tab: "explore" | "hotspots" | "scenarios") => void;
+  activeTab: "explore" | "insights" | "scenarios";
+  onTabChange: (tab: "explore" | "insights" | "scenarios") => void;
   hotspots: HotspotCluster[];
+  transitLines: TransitLine[];
+  trafficIntersections: { location_name: string; latitude: number; longitude: number; total_vehicle: number }[];
   scenarios: Scenario[];
   onZoneClick: (zone: Zone) => void;
   onZoomToZone: (zone: Zone) => void;
@@ -42,7 +44,7 @@ interface SidebarProps {
 
 const TAB_CONFIG = [
   { key: "explore" as const, label: "Explore", icon: Map },
-  { key: "hotspots" as const, label: "Hotspots", icon: AlertTriangle },
+  { key: "insights" as const, label: "Insights", icon: Lightbulb },
   { key: "scenarios" as const, label: "Scenarios", icon: Route },
 ];
 
@@ -53,6 +55,8 @@ export default function Sidebar({
   activeTab,
   onTabChange,
   hotspots,
+  transitLines,
+  trafficIntersections,
   scenarios,
   onZoneClick,
   onZoomToZone,
@@ -163,8 +167,8 @@ export default function Sidebar({
             { key: "subwayLines" as const, label: "Subways" },
             { key: "lrtLines" as const, label: "LRTs" },
             { key: "busLines" as const, label: "Buses" },
-            { key: "trafficHotspots" as const, label: "Hotspots" },
-            { key: "zoneLabels" as const, label: "Labels" },
+            { key: "trafficHotspots" as const, label: "Traffic" },
+            { key: "stations" as const, label: "Stations" },
           ].map(({ key, label }) => (
             <button
               key={key}
@@ -206,10 +210,11 @@ export default function Sidebar({
             )}
           </>
         )}
-        {activeTab === "hotspots" && (
-          <HotspotPanel
-            hotspots={hotspots}
+        {activeTab === "insights" && (
+          <InsightsPanel
             zones={zones}
+            transitLines={transitLines}
+            trafficIntersections={trafficIntersections}
             onZoomToZone={onZoomToZone}
           />
         )}

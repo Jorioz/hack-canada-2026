@@ -59,7 +59,7 @@ export default function Home() {
     const [selectedZone, setSelectedZone] = useState<Zone | null>(null);
     const [selectedLine, setSelectedLine] = useState<TransitLine | null>(null);
     const [activeTab, setActiveTab] = useState<
-        "explore" | "hotspots" | "scenarios"
+        "explore" | "insights" | "scenarios"
     >("explore");
     const [layers, setLayers] = useState<LayerVisibility>({
         needScore: true,
@@ -67,7 +67,7 @@ export default function Home() {
         lrtLines: true,
         subwayLines: true,
         trafficHotspots: true,
-        zoneLabels: false,
+        stations: true,
     });
 
     // Scenario state
@@ -344,7 +344,7 @@ export default function Home() {
             lrtLines: false,
             subwayLines: false,
             trafficHotspots: false,
-            zoneLabels: false,
+            stations: false,
         });
         setIsDrawing(true);
         setDrawingWaypoints([]);
@@ -475,6 +475,8 @@ export default function Home() {
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
                 hotspots={hotspots}
+                transitLines={transitLines}
+                trafficIntersections={trafficIntersections}
                 scenarios={scenarios}
                 onZoneClick={handleZoneClick}
                 onZoomToZone={handleZoomToZone}
