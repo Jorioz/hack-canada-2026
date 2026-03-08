@@ -69,6 +69,8 @@ interface TransitMapProps {
     zoom: number;
     densityGeoJSON: DensityGeoJSON | null;
     trafficIntersections: TrafficIntersection[];
+    aiRoutePreview?: [number, number][];
+    userWaypointsPreview?: [number, number][];
 }
 
 export default function TransitMap({
@@ -88,6 +90,8 @@ export default function TransitMap({
     zoom,
     densityGeoJSON,
     trafficIntersections,
+    aiRoutePreview,
+    userWaypointsPreview,
 }: TransitMapProps) {
     const mapRef = useRef<any>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -100,6 +104,7 @@ export default function TransitMap({
         hotspots: any;
         drawing: any;
         scenarios: any;
+        aiPreview: any;
     }>({
         density: null,
         traffic: null,
@@ -108,6 +113,7 @@ export default function TransitMap({
         hotspots: null,
         drawing: null,
         scenarios: null,
+        aiPreview: null,
     });
     const onLineClickRef = useRef(onLineClick);
     const onMapClickRef = useRef(onMapClick);
@@ -169,12 +175,16 @@ export default function TransitMap({
             ).addTo(map);
 
             // Custom pane for drawing (above overlay so it stays clickable)
-            const drawingPane = map.createPane('drawingPane');
-            drawingPane.style.zIndex = '450';
+            const drawingPane = map.createPane("drawingPane");
+            drawingPane.style.zIndex = "450";
 
             // Custom pane for scenarios (above all data layers)
-            const scenarioPane = map.createPane('scenarioPane');
-            scenarioPane.style.zIndex = '460';
+            const scenarioPane = map.createPane("scenarioPane");
+            scenarioPane.style.zIndex = "460";
+
+            // Custom pane for AI route preview (topmost)
+            const aiPreviewPane = map.createPane("aiPreviewPane");
+            aiPreviewPane.style.zIndex = "470";
 
             // Create layer groups
             layerGroupsRef.current = {
@@ -185,6 +195,7 @@ export default function TransitMap({
                 hotspots: L.layerGroup().addTo(map),
                 drawing: L.layerGroup().addTo(map),
                 scenarios: L.layerGroup().addTo(map),
+                aiPreview: L.layerGroup().addTo(map),
             };
 
             // Map click handler
@@ -258,7 +269,9 @@ export default function TransitMap({
 
                     layer.on("click", () => {
                         const matchingZone = zones.find(
-                            (z) => z.name.toLowerCase() === p.neighbourhood.toLowerCase()
+                            (z) =>
+                                z.name.toLowerCase() ===
+                                p.neighbourhood.toLowerCase(),
                         );
                         if (matchingZone) {
                             currentOnZoneClick(matchingZone);
@@ -322,11 +335,13 @@ export default function TransitMap({
     // Update transit lines
     useEffect(() => {
         const lgLines = layerGroupsRef.current.transitLines;
-        if (!lgLines || !mapRef.current) return;
+        const lgStations = layerGroupsRef.current.stations;
+        if (!lgLines || !lgStations || !mapRef.current) return;
 
         const updateLines = async () => {
             const L = (await import("leaflet")).default;
             lgLines.clearLayers();
+            lgStations.clearLayers();
 
             const visibleModes = new Set<string>();
             if (layers.subwayLines) visibleModes.add("subway");
@@ -335,92 +350,79 @@ export default function TransitMap({
 
             if (visibleModes.size === 0) return;
 
-            transitLines.filter(line => visibleModes.has(line.mode)).forEach((line) => {
-                const polyline = L.polyline(line.coordinates, {
-                    color: line.color,
-                    weight: line.mode === "subway" ? 4 : 3,
-                    opacity: 0.6,
-                    dashArray: line.mode === "lrt" ? "8, 6" : undefined,
-                });
+            transitLines
+                .filter((line) => visibleModes.has(line.mode))
+                .forEach((line) => {
+                    const polyline = L.polyline(line.coordinates, {
+                        color: line.color,
+                        weight: line.mode === "subway" ? 4 : 3,
+                        opacity: 0.6,
+                        dashArray: line.mode === "lrt" ? "8, 6" : undefined,
+                    });
 
-                const tooltipContent = `<div style="color:#1e293b;font-size:12px;white-space:nowrap">
+                    const tooltipContent = `<div style="color:#1e293b;font-size:12px;white-space:nowrap">
           <strong style="color:${line.color}">${line.name}</strong><br/>
           Run by: TTC<br/>
           Daily Riders: ${line.dailyRidership.toLocaleString()}
         </div>`;
 
-                polyline.bindTooltip(tooltipContent, {
-                    sticky: true,
-                    className: "transit-tooltip",
-                });
-
-                polyline.on("mouseover", function (e) {
-                    const layer = e.target;
-                    layer.setStyle({
-                        weight: line.mode === "subway" ? 7 : 6,
-                        opacity: 1,
+                    polyline.bindTooltip(tooltipContent, {
+                        sticky: true,
+                        className: "transit-tooltip",
                     });
-                    layer.bringToFront();
-                });
 
-                polyline.on("mouseout", function (e) {
-                    const layer = e.target;
-                    layer.setStyle({
-                        weight: line.mode === "subway" ? 4 : 3,
-                        opacity: 0.6,
+                    polyline.on("mouseover", function (e) {
+                        const layer = e.target;
+                        layer.setStyle({
+                            weight: line.mode === "subway" ? 7 : 6,
+                            opacity: 1,
+                        });
+                        layer.bringToFront();
+                    });
+
+                    polyline.on("mouseout", function (e) {
+                        const layer = e.target;
+                        layer.setStyle({
+                            weight: line.mode === "subway" ? 4 : 3,
+                            opacity: 0.6,
+                        });
+                    });
+
+                    polyline.on("click", () => {
+                        onLineClickRef.current(line);
+                    });
+
+                    polyline.addTo(lgLines);
+
+                    // Stations
+                    line.stations.forEach((station) => {
+                        const marker = L.circleMarker(station.position, {
+                            radius: 4,
+                            fillColor: line.color,
+                            fillOpacity: 1,
+                            color: "#fff",
+                            weight: 1.5,
+                        });
+
+                        marker.bindTooltip(
+                            `<div style="color:#1e293b;font-size:11px">
+              <strong>${station.name}</strong>
+            </div>`,
+                            { direction: "top", offset: [0, -5] },
+                        );
+                        marker.addTo(lgStations);
                     });
                 });
-
-                polyline.on("click", () => {
-                    onLineClickRef.current(line);
-                });
-
-                polyline.addTo(lgLines);
-            });
         };
 
         updateLines();
-    }, [transitLines, layers.subwayLines, layers.lrtLines, layers.busLines, mapReady]);
-
-    // Update stations (independent toggle)
-    useEffect(() => {
-        const lgStations = layerGroupsRef.current.stations;
-        if (!lgStations || !mapRef.current) return;
-
-        const updateStations = async () => {
-            const L = (await import("leaflet")).default;
-            lgStations.clearLayers();
-
-            if (!layers.stations) return;
-
-            const visibleModes = new Set<string>();
-            if (layers.subwayLines) visibleModes.add("subway");
-            if (layers.lrtLines) visibleModes.add("lrt");
-            if (layers.busLines) visibleModes.add("bus");
-
-            transitLines.filter(line => visibleModes.has(line.mode)).forEach((line) => {
-                line.stations.forEach((station) => {
-                    const marker = L.circleMarker(station.position, {
-                        radius: 4,
-                        fillColor: line.color,
-                        fillOpacity: 1,
-                        color: "#fff",
-                        weight: 1.5,
-                    });
-
-                    marker.bindTooltip(
-                        `<div style="color:#1e293b;font-size:11px">
-              <strong>${station.name}</strong>
-            </div>`,
-                        { direction: "top", offset: [0, -5] },
-                    );
-                    marker.addTo(lgStations);
-                });
-            });
-        };
-
-        updateStations();
-    }, [transitLines, layers.stations, layers.subwayLines, layers.lrtLines, layers.busLines, mapReady]);
+    }, [
+        transitLines,
+        layers.subwayLines,
+        layers.lrtLines,
+        layers.busLines,
+        mapReady,
+    ]);
 
     // Update hotspots
     useEffect(() => {
@@ -495,6 +497,66 @@ export default function TransitMap({
 
         updateDrawing();
     }, [isDrawing, drawingPath, drawingWaypoints, mapReady]);
+
+    // Update AI route preview
+    useEffect(() => {
+        const lg = layerGroupsRef.current.aiPreview;
+        if (!lg || !mapRef.current) return;
+
+        const updateAiPreview = async () => {
+            const L = (await import("leaflet")).default;
+            lg.clearLayers();
+
+            // Draw the AI suggested route
+            if (aiRoutePreview && aiRoutePreview.length > 1) {
+                // Outer glow
+                L.polyline(aiRoutePreview, {
+                    color: "#f59e0b",
+                    weight: 10,
+                    opacity: 0.3,
+                    lineCap: "round",
+                    lineJoin: "round",
+                    pane: "aiPreviewPane",
+                }).addTo(lg);
+
+                // Core line
+                L.polyline(aiRoutePreview, {
+                    color: "#f59e0b",
+                    weight: 4,
+                    opacity: 0.9,
+                    lineCap: "round",
+                    lineJoin: "round",
+                    pane: "aiPreviewPane",
+                }).addTo(lg);
+
+                // Dashed overlay for visibility
+                L.polyline(aiRoutePreview, {
+                    color: "#fff",
+                    weight: 2,
+                    opacity: 0.5,
+                    dashArray: "6, 10",
+                    lineCap: "round",
+                    pane: "aiPreviewPane",
+                }).addTo(lg);
+            }
+
+            // Draw user's original waypoints (semi-transparent)
+            if (userWaypointsPreview && userWaypointsPreview.length > 0) {
+                userWaypointsPreview.forEach((point, i) => {
+                    L.circleMarker(point, {
+                        radius: 6,
+                        fillColor: i === 0 ? "#22c55e" : "#94a3b8",
+                        fillOpacity: 0.7,
+                        color: "#fff",
+                        weight: 2,
+                        pane: "aiPreviewPane",
+                    }).addTo(lg);
+                });
+            }
+        };
+
+        updateAiPreview();
+    }, [aiRoutePreview, userWaypointsPreview, mapReady]);
 
     // Update saved scenarios
     useEffect(() => {
