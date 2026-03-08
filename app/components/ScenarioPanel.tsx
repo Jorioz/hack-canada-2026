@@ -1,9 +1,8 @@
 "use client";
 
-import { Scenario, ScenarioMode } from "../types";
+import { Scenario, ScenarioMode, FullAnalysisResponse } from "../types";
 import {
   Plus,
-  Pencil,
   Trash2,
   TrainFront,
   TramFront,
@@ -17,6 +16,9 @@ import {
   BarChart3,
   Eye,
   EyeOff,
+  Brain,
+  Loader2,
+  Sparkles,
 } from "lucide-react";
 
 import { SCENARIO_MODE_COLORS } from "../types";
@@ -34,6 +36,9 @@ interface ScenarioPanelProps {
   onStationSpacingChange: (spacing: number) => void;
   onDeleteScenario: (id: string) => void;
   onToggleScenario: (id: string) => void;
+  onAnalyzeScenario: (id: string) => void;
+  analysisResults: Record<string, FullAnalysisResponse>;
+  analyzingScenarioId: string | null;
 }
 
 const MODE_OPTIONS: {
@@ -86,6 +91,9 @@ export default function ScenarioPanel({
   onStationSpacingChange,
   onDeleteScenario,
   onToggleScenario,
+  onAnalyzeScenario,
+  analysisResults,
+  analyzingScenarioId,
 }: ScenarioPanelProps) {
   return (
     <div className="p-4 space-y-4 animate-fade-up">
@@ -349,6 +357,45 @@ export default function ScenarioPanel({
                       <p className="text-[9px] text-[var(--color-text-muted)] italic mt-1 opacity-60">
                         ⚠️ Screening-level estimates only
                       </p>
+
+                      {/* AI Analysis Section */}
+                      <div className="mt-3 pt-3 border-t border-[rgba(255,255,255,0.06)]">
+                        {!analysisResults[scenario.id] && analyzingScenarioId !== scenario.id && (
+                          <button
+                            onClick={() => onAnalyzeScenario(scenario.id)}
+                            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-medium transition-all hover:scale-[1.01] active:scale-[0.99]"
+                            style={{
+                              background: `linear-gradient(135deg, rgba(139,92,246,0.2) 0%, rgba(6,182,212,0.2) 100%)`,
+                              border: `1px solid rgba(139,92,246,0.3)`,
+                            }}
+                          >
+                            <Brain size={14} className="text-purple-400" />
+                            <span className="text-purple-300">Run Full Simulation</span>
+                            <Sparkles size={12} className="text-cyan-400" />
+                          </button>
+                        )}
+
+                        {analyzingScenarioId === scenario.id && (
+                          <div className="flex items-center justify-center gap-2 py-3">
+                            <Loader2 size={14} className="text-purple-400 animate-spin" />
+                            <span className="text-[11px] text-purple-300">Simulating routes on map...</span>
+                          </div>
+                        )}
+
+                        {analysisResults[scenario.id] && (
+                          <button
+                            onClick={() => onAnalyzeScenario(scenario.id)}
+                            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-medium transition-all hover:scale-[1.01] active:scale-[0.99]"
+                            style={{
+                              background: `rgba(6,182,212,0.1)`,
+                              border: `1px solid rgba(6,182,212,0.25)`,
+                            }}
+                          >
+                            <BarChart3 size={13} className="text-cyan-400" />
+                            <span className="text-cyan-300">View Full Analysis</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>

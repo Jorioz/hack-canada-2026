@@ -240,3 +240,305 @@ body {
   letter-spacing: 0.05em;
   margin-top: 2px;
 }
+
+/* ---- Analysis Overlay ---- */
+.analysis-overlay {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(520px, 45%);
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  background: rgba(10, 14, 26, 0.92);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-left: 1px solid rgba(148, 163, 184, 0.1);
+  box-shadow: -8px 0 40px rgba(0, 0, 0, 0.5);
+  animation: slide-in-right 0.35s ease-out;
+}
+
+.analysis-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.analysis-close-btn {
+  padding: 0.5rem;
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  transition: all 0.2s;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.analysis-close-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--color-accent-red);
+}
+
+.analysis-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.25rem;
+}
+
+.analysis-section {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.06);
+}
+.analysis-section:last-child {
+  border-bottom: none;
+}
+
+.analysis-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-primary);
+  margin-bottom: 0.75rem;
+}
+
+.analysis-stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--color-border);
+  text-align: center;
+}
+
+.analysis-stat-value {
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.analysis-stat-label {
+  font-size: 0.6rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ---- Simulation Map Animations ---- */
+@keyframes sim-pulse {
+  0%, 100% { opacity: 0.5; stroke-width: 4; }
+  50% { opacity: 1; stroke-width: 6; }
+}
+
+.sim-candidate-pulse path {
+  animation: sim-pulse 1s ease-in-out infinite;
+}
+
+@keyframes sim-glow {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(6, 182, 212, 0.4)); }
+  50% { filter: drop-shadow(0 0 12px rgba(6, 182, 212, 0.8)); }
+}
+
+.sim-best-route path {
+  animation: sim-glow 2s ease-in-out infinite;
+}
+
+.sim-rank-label {
+  background: none !important;
+  border: none !important;
+}
+
+/* ---- Route Suggestion Carousel ---- */
+.route-carousel {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1200;
+  width: min(520px, 85%);
+  background: rgba(10, 14, 26, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+  padding: 1rem 1.25rem;
+  animation: slide-up 0.35s ease-out;
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateX(-50%) translateY(30px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.route-carousel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.route-carousel-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.route-carousel-counter {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-accent-cyan);
+  background: rgba(6, 182, 212, 0.1);
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid rgba(6, 182, 212, 0.25);
+}
+
+.route-carousel-body {
+  margin-bottom: 0.75rem;
+}
+
+.route-carousel-name {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--color-accent-green);
+  margin-bottom: 0.35rem;
+  line-height: 1.3;
+}
+
+.route-carousel-desc {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+}
+
+.route-carousel-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.route-carousel-tag {
+  font-size: 0.65rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(139, 92, 246, 0.12);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: #c4b5fd;
+  font-weight: 500;
+}
+
+.route-carousel-stats {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.7rem;
+  margin-bottom: 0.5rem;
+}
+
+.route-carousel-score {
+  color: var(--color-accent-cyan);
+  font-weight: 700;
+}
+
+.route-carousel-waypoints {
+  color: var(--color-text-muted);
+}
+
+.route-carousel-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.route-carousel-nav-btn {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.35rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.route-carousel-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-hover);
+}
+
+.route-carousel-dots {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.route-carousel-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(148, 163, 184, 0.2);
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+}
+.route-carousel-dot.active {
+  background: var(--color-accent-cyan);
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.5);
+}
+
+.route-carousel-select-btn {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.4rem 1rem;
+  border-radius: 8px;
+  border: none;
+  background: var(--color-accent-green);
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-left: auto;
+}
+.route-carousel-select-btn:hover {
+  filter: brightness(1.15);
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.4);
+}
+
+.route-carousel-cancel-btn {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--color-accent-red);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.route-carousel-cancel-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.route-carousel-hint {
+  font-size: 0.6rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  margin-top: 0.5rem;
+}

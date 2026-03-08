@@ -7,6 +7,8 @@ import {
     HotspotCluster,
     LayerVisibility,
     Zone,
+    SimulationCandidate,
+    SimulationPhase,
 } from "../types";
 
 function getDensityColor(ratio: number): string {
@@ -69,6 +71,10 @@ interface TransitMapProps {
     zoom: number;
     densityGeoJSON: DensityGeoJSON | null;
     trafficIntersections: TrafficIntersection[];
+    simulationCandidates: SimulationCandidate[];
+    simulationPhase: SimulationPhase;
+    candidateProgress: number;
+    highlightedCandidateIndex: number;
 }
 
 export default function TransitMap({
@@ -88,6 +94,10 @@ export default function TransitMap({
     zoom,
     densityGeoJSON,
     trafficIntersections,
+    simulationCandidates,
+    simulationPhase,
+    candidateProgress,
+    highlightedCandidateIndex,
 }: TransitMapProps) {
     const mapRef = useRef<any>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -100,6 +110,7 @@ export default function TransitMap({
         hotspots: any;
         drawing: any;
         scenarios: any;
+        simulation: any;
     }>({
         density: null,
         traffic: null,
@@ -108,6 +119,7 @@ export default function TransitMap({
         hotspots: null,
         drawing: null,
         scenarios: null,
+        simulation: null,
     });
     const onLineClickRef = useRef(onLineClick);
     const onMapClickRef = useRef(onMapClick);
@@ -185,6 +197,7 @@ export default function TransitMap({
                 hotspots: L.layerGroup().addTo(map),
                 drawing: L.layerGroup().addTo(map),
                 scenarios: L.layerGroup().addTo(map),
+                simulation: L.layerGroup().addTo(map),
             };
 
             // Map click handler
@@ -582,6 +595,100 @@ export default function TransitMap({
             mapRef.current.closePopup();
         }
     }, [isDrawing]);
+
+    // Render simulation candidates on the map (animated)
+    useEffect(() => {
+        const lg = layerGroupsRef.current.simulation;
+        if (!lg || !mapRef.current) return;
+
+        const renderCandidates = async () => {
+            const L = (await import("leaflet")).default;
+            lg.clearLayers();
+
+            if (simulationPhase === "idle" || simulationCandidates.length === 0) return;
+
+            // Only show candidates up to candidateProgress
+            const visibleCount = Math.min(candidateProgress, simulationCandidates.length);
+
+            simulationCandidates.forEach((candidate, i) => {
+                if (i >= visibleCount) return;
+
+                const isBest = i === 0 && simulationPhase === "complete";
+                const isLatest = i === visibleCount - 1;
+                const isHighlighted = i === highlightedCandidateIndex;
+
+                // Color gradient: highlighted = bright orange, best = cyan, others fade
+                const hue = isHighlighted ? 35 : isBest ? 180 : 270 - i * 15;
+                const saturation = isHighlighted ? 95 : isBest ? 80 : Math.max(20, 60 - i * 8);
+                const lightness = isHighlighted ? 55 : isBest ? 60 : Math.max(30, 55 - i * 5);
+                const color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+
+                // Opacity: highlighted/best gets full, others dim
+                const opacity = isHighlighted ? 0.95 : isBest ? 0.9 : isLatest ? 0.7 : Math.max(0.15, 0.5 - i * 0.06);
+
+                // Glow for highlighted or best route
+                if (isHighlighted || isBest) {
+                    L.polyline(candidate.path_lat_lng, {
+                        color: isHighlighted ? "#f59e0b" : "#06b6d4",
+                        weight: 14,
+                        opacity: 0.3,
+                        lineCap: "round",
+                        lineJoin: "round",
+                        pane: "scenarioPane",
+                        interactive: false,
+                    }).addTo(lg);
+                }
+
+                // Main line
+                const line = L.polyline(candidate.path_lat_lng, {
+                    color,
+                    weight: isHighlighted ? 6 : isBest ? 5 : isLatest ? 4 : 3,
+                    opacity,
+                    lineCap: "round",
+                    lineJoin: "round",
+                    pane: "scenarioPane",
+                    className: isHighlighted ? "sim-candidate-pulse" : isLatest && simulationPhase !== "complete" ? "sim-candidate-pulse" : isBest ? "sim-best-route" : "",
+                });
+
+                line.bindPopup(
+                    `<div style="color:#1e293b;font-size:12px">
+                        <strong>Route #${candidate.rank}</strong><br/>
+                        Score: ${candidate.candidate_score.toFixed(1)}<br/>
+                        ${candidate.reason}
+                    </div>`
+                );
+                line.addTo(lg);
+
+                // Rank label at midpoint
+                if (candidate.path_lat_lng.length >= 2) {
+                    const midIdx = Math.floor(candidate.path_lat_lng.length / 2);
+                    const midPt = candidate.path_lat_lng[midIdx];
+                    const marker = L.marker(midPt, {
+                        icon: L.divIcon({
+                            className: "sim-rank-label",
+                            html: `<div style="
+                                background: ${isBest ? "#06b6d4" : "rgba(15,23,42,0.85)"};
+                                color: ${isBest ? "#0a0e1a" : color};
+                                border: 1px solid ${color};
+                                border-radius: 12px;
+                                padding: 2px 6px;
+                                font-size: 10px;
+                                font-weight: 700;
+                                white-space: nowrap;
+                            ">#${candidate.rank} ${isBest ? "★ BEST" : `(${candidate.candidate_score.toFixed(1)})`}</div>`,
+                            iconSize: [0, 0],
+                            iconAnchor: [0, 0],
+                        }),
+                        pane: "scenarioPane",
+                        interactive: false,
+                    });
+                    marker.addTo(lg);
+                }
+            });
+        };
+
+        renderCandidates();
+    }, [simulationCandidates, simulationPhase, candidateProgress, highlightedCandidateIndex, mapReady]);
 
     return (
         <div

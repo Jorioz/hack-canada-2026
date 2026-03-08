@@ -166,6 +166,8 @@ def generate_subway_route_candidates(
     candidates.append(direct_metrics)
 
     # Additional candidates: insert high-benefit centroids near each segment.
+    # Pick top-N per segment for diversity (not just #1).
+    top_n_per_segment = max(3, max_candidates)
     centroid_series = gpd.GeoSeries(
         [Point(lng, lat) for lat, lng in zip(scored_hoods["centroid_lat"], scored_hoods["centroid_lng"])],
         crs="EPSG:4326",
@@ -179,17 +181,52 @@ def generate_subway_route_candidates(
         if nearby.empty:
             continue
 
-        pivot = nearby.sort_values("benefit_score", ascending=False).iloc[0]
-        pivot_point = (float(pivot["centroid_lat"]), float(pivot["centroid_lng"]))
+        top_pivots = nearby.sort_values("benefit_score", ascending=False).head(top_n_per_segment)
+        for rank_j, (_, pivot) in enumerate(top_pivots.iterrows()):
+            pivot_point = (float(pivot["centroid_lat"]), float(pivot["centroid_lng"]))
+            variant = normalized_points[: i + 1] + [pivot_point] + normalized_points[i + 1 :]
+            metrics = _build_candidate_metrics(variant, scored_projected, buffer_km)
+            metrics["candidate_id"] = f"candidate_via_{i + 1}_{rank_j}"
+            hood_name = _coerce_str(pivot["neighbourhood"])
+            metrics["reason"] = (
+                f"Detour via {'high-need' if rank_j == 0 else 'underserved'} neighbourhood "
+                f"'{hood_name}' between waypoint {i + 1} and {i + 2}"
+            )
+            candidates.append(metrics)
 
-        variant = normalized_points[: i + 1] + [pivot_point] + normalized_points[i + 1 :]
-        metrics = _build_candidate_metrics(variant, scored_projected, buffer_km)
-        metrics["candidate_id"] = f"candidate_via_{i + 1}"
-        metrics["reason"] = (
-            f"Detour via high-need neighbourhood '{_coerce_str(pivot['neighbourhood'])}' "
-            f"between waypoint {i + 1} and {i + 2}"
-        )
-        candidates.append(metrics)
+    # Multi-detour candidates: combine top pivots from different segments.
+    if len(normalized_points) >= 3:
+        segment_pivots: list[list[tuple[float, float, str]]] = []
+        for i in range(len(normalized_points) - 1):
+            a = normalized_points[i]
+            b = normalized_points[i + 1]
+            segment_line = _project_to_32617(_line_from_lat_lng([a, b]))
+            seg_buffer = segment_line.buffer(search_km * 1000)
+            nearby = scored_projected[centroid_series.intersects(seg_buffer)].copy()
+            if nearby.empty:
+                segment_pivots.append([])
+                continue
+            top2 = nearby.sort_values("benefit_score", ascending=False).head(2)
+            segment_pivots.append([
+                (float(row["centroid_lat"]), float(row["centroid_lng"]), _coerce_str(row["neighbourhood"]))
+                for _, row in top2.iterrows()
+            ])
+
+        # Combine pivots from alternating ranks to create unique multi-detour routes
+        for combo_idx in range(min(3, max_candidates)):
+            multi_path = [normalized_points[0]]
+            reasons = []
+            for seg_idx, pivots in enumerate(segment_pivots):
+                if pivots:
+                    pick = pivots[(combo_idx + seg_idx) % len(pivots)]
+                    multi_path.append((pick[0], pick[1]))
+                    reasons.append(pick[2])
+                multi_path.append(normalized_points[seg_idx + 1])
+            if len(reasons) >= 2:
+                metrics = _build_candidate_metrics(multi_path, scored_projected, buffer_km)
+                metrics["candidate_id"] = f"candidate_multi_{combo_idx}"
+                metrics["reason"] = f"Multi-stop route connecting {', '.join(reasons[:3])}"
+                candidates.append(metrics)
 
     # Deduplicate by normalized path signature.
     dedup: dict[str, dict[str, Any]] = {}

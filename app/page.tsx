@@ -8,6 +8,10 @@ import {
     ScenarioMode,
     LayerVisibility,
     HotspotCluster,
+    FullAnalysisResponse,
+    FullSimulationResponse,
+    SimulationCandidate,
+    SimulationPhase,
 } from "./types";
 import { MOCK_TRANSIT_LINES } from "./data/mockData";
 import ttcRoutesRaw from "./data/ttc_routes.json";
@@ -16,6 +20,8 @@ import { computeNeedScore } from "./utils/scoring";
 
 import TransitMap from "./components/TransitMap";
 import Sidebar from "./components/Sidebar";
+import AnalysisView from "./components/AnalysisView";
+import RouteSuggestionCarousel from "./components/RouteSuggestionCarousel";
 
 interface DensityGeoJSON {
     type: "FeatureCollection";
@@ -85,6 +91,19 @@ export default function Home() {
 
     // Hotspot clusters
     const [hotspots, setHotspots] = useState<HotspotCluster[]>([]);
+
+    // AI Analysis state
+    const [analysisResults, setAnalysisResults] = useState<Record<string, FullAnalysisResponse>>({});
+    const [analyzingScenarioId, setAnalyzingScenarioId] = useState<string | null>(null);
+
+    // Full simulation state (dedicated analysis page)
+    const [simulationPhase, setSimulationPhase] = useState<SimulationPhase>("idle");
+    const [simulationResult, setSimulationResult] = useState<FullSimulationResponse | null>(null);
+    const [simulationCandidates, setSimulationCandidates] = useState<SimulationCandidate[]>([]);
+    const [candidateProgress, setCandidateProgress] = useState(0);
+    const [showAnalysisView, setShowAnalysisView] = useState(false);
+    const [analysisScenarioId, setAnalysisScenarioId] = useState<string | null>(null);
+    const [carouselIndex, setCarouselIndex] = useState(0);
 
     // Merge GTFS routes with hand-crafted mock lines (which have better descriptions)
     const [transitLines] = useState<TransitLine[]>(() => {
@@ -455,6 +474,150 @@ export default function Home() {
         );
     }, []);
 
+    const handleAnalyzeScenario = useCallback(
+        async (id: string) => {
+            const scenario = scenarios.find((s) => s.id === id);
+            if (!scenario || scenario.path.length < 2) return;
+
+            // Open the analysis view and start simulation
+            setAnalysisScenarioId(id);
+            setShowAnalysisView(true);
+            setSimulationPhase("simulating");
+            setSimulationResult(null);
+            setSimulationCandidates([]);
+            setCandidateProgress(0);
+            setCarouselIndex(0);
+            setAnalyzingScenarioId(id);
+
+            try {
+                // ── Phase 1: Fetch route candidates quickly and animate them on the map ──
+                let candidateRoutes: SimulationCandidate[] = [];
+                try {
+                    const candidatesRes = await fetch("/api/py/transit/route/candidates", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            waypoints_lat_lng: scenario.path,
+                            max_candidates: 6,
+                            buffer_km: 1.0,
+                            search_km: 3.0,
+                        }),
+                    });
+                    if (candidatesRes.ok) {
+                        const candidatesData: RouteCandidateResponse = await candidatesRes.json();
+                        candidateRoutes = (candidatesData.candidates || []).map((c, i) => ({
+                            rank: c.rank,
+                            path_lat_lng: c.path_lat_lng,
+                            candidate_score: c.candidate_score,
+                            reason: c.reason,
+                            name: `Route Candidate ${i + 1}`,
+                            description: c.reason,
+                            neighbourhoods: [],
+                            pareto_front: i < 3,
+                        }));
+                    }
+                } catch (e) {
+                    console.warn("Route candidates fetch failed, continuing with full sim:", e);
+                }
+
+                // Animate candidates appearing on map one by one
+                if (candidateRoutes.length > 0) {
+                    setSimulationCandidates(candidateRoutes);
+                    for (let i = 1; i <= candidateRoutes.length; i++) {
+                        await new Promise((resolve) => setTimeout(resolve, 800));
+                        setCandidateProgress(i);
+                    }
+                    // Brief pause to let user see all routes
+                    await new Promise((resolve) => setTimeout(resolve, 600));
+                }
+
+                // ── Phase 2: Run full analysis (mode comparison, sensitivity, AI) ──
+                setSimulationPhase("analyzing");
+
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 90000);
+
+                const response = await fetch("/api/py/simulation/full", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        path_lat_lng: scenario.path,
+                        station_spacing_m: scenario.stationSpacing,
+                        buffer_km: 0.8,
+                        search_km: 3.0,
+                        max_candidates: 6,
+                        user_question: `Analyze this ${scenario.mode} corridor and recommend the best transit mode. Explain tradeoffs between cost, ridership, and timeline.`,
+                    }),
+                    signal: controller.signal,
+                });
+                clearTimeout(timeoutId);
+
+                if (response.ok) {
+                    const data: FullSimulationResponse = await response.json();
+
+                    // Update candidates with Pareto-ranked versions from full analysis
+                    if (data.candidates && data.candidates.length > 0) {
+                        setSimulationCandidates(data.candidates);
+                        setCandidateProgress(data.candidates.length);
+                    }
+
+                    setSimulationResult(data);
+                    setSimulationPhase("complete");
+
+                    setAnalysisResults((prev) => ({
+                        ...prev,
+                        [id]: {
+                            comparison: data.comparison,
+                            sensitivity: data.sensitivity,
+                            briefing: data.briefing,
+                            ai_analysis: data.ai_analysis,
+                        },
+                    }));
+                } else {
+                    // Fallback to the simpler analyze endpoint
+                    const fallbackResponse = await fetch("/api/py/simulation/analyze", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            path_lat_lng: scenario.path,
+                            station_spacing_m: scenario.stationSpacing,
+                            buffer_km: 0.8,
+                            user_question: "",
+                        }),
+                    });
+                    if (fallbackResponse.ok) {
+                        const data: FullAnalysisResponse = await fallbackResponse.json();
+                        setSimulationResult({
+                            candidates: candidateRoutes,
+                            best_candidate_index: 0,
+                            comparison: data.comparison,
+                            sensitivity: data.sensitivity,
+                            briefing: data.briefing,
+                            ai_analysis: data.ai_analysis,
+                        });
+                        setSimulationPhase("complete");
+                        setAnalysisResults((prev) => ({ ...prev, [id]: data }));
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to run full simulation:", error);
+                setSimulationPhase("idle");
+                setShowAnalysisView(false);
+            } finally {
+                setAnalyzingScenarioId(null);
+            }
+        },
+        [scenarios],
+    );
+
+    const handleCloseAnalysis = useCallback(() => {
+        setShowAnalysisView(false);
+        setSimulationPhase("idle");
+        setSimulationCandidates([]);
+        setCandidateProgress(0);
+        setCarouselIndex(0);
+    }, []);
+
     const handleZoomToZone = useCallback((zone: Zone) => {
         setMapCenter(zone.center);
         setMapZoom(14);
@@ -491,6 +654,9 @@ export default function Home() {
                 onStationSpacingChange={setStationSpacing}
                 onDeleteScenario={handleDeleteScenario}
                 onToggleScenario={handleToggleScenario}
+                onAnalyzeScenario={handleAnalyzeScenario}
+                analysisResults={analysisResults}
+                analyzingScenarioId={analyzingScenarioId}
                 layers={layers}
                 onToggleLayer={toggleLayer}
             />
@@ -514,6 +680,10 @@ export default function Home() {
                     zoom={mapZoom}
                     densityGeoJSON={densityGeoJSON}
                     trafficIntersections={trafficIntersections}
+                    simulationCandidates={simulationCandidates}
+                    simulationPhase={simulationPhase}
+                    candidateProgress={candidateProgress}
+                    highlightedCandidateIndex={carouselIndex}
                 />
 
                 <div className="absolute bottom-6 right-4 z-[1000] glass-panel px-4 py-3">
@@ -606,6 +776,36 @@ export default function Home() {
                         </button>
                     </div>
                 )}
+
+                {/* Route Suggestion Carousel (shown during all simulation phases) */}
+                {showAnalysisView && simulationCandidates.length > 0 &&
+                  simulationPhase !== "idle" && (
+                    <RouteSuggestionCarousel
+                        candidates={simulationCandidates}
+                        currentIndex={carouselIndex}
+                        onIndexChange={setCarouselIndex}
+                        onSelect={() => {
+                            // User picked a route — let the full analysis continue running
+                            // The AnalysisView will show results when phase becomes "complete"
+                        }}
+                        onCancel={handleCloseAnalysis}
+                    />
+                )}
+
+                {/* Analysis View Overlay */}
+                {showAnalysisView && analysisScenarioId && (() => {
+                    const scenario = scenarios.find((s) => s.id === analysisScenarioId);
+                    if (!scenario) return null;
+                    return (
+                        <AnalysisView
+                            scenario={scenario}
+                            simulation={simulationResult}
+                            phase={simulationPhase}
+                            candidateProgress={candidateProgress}
+                            onClose={handleCloseAnalysis}
+                        />
+                    );
+                })()}
             </div>
         </main>
     );

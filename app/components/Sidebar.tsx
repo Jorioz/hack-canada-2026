@@ -1,6 +1,6 @@
 "use client";
 
-import { Zone, TransitLine, Scenario, ScenarioMode, LayerVisibility, HotspotCluster } from "../types";
+import { Zone, TransitLine, Scenario, ScenarioMode, LayerVisibility, HotspotCluster, FullAnalysisResponse } from "../types";
 import ExplorePanel from "./ExplorePanel";
 import InsightsPanel from "./InsightsPanel";
 import ScenarioPanel from "./ScenarioPanel";
@@ -38,6 +38,9 @@ interface SidebarProps {
   onStationSpacingChange: (spacing: number) => void;
   onDeleteScenario: (id: string) => void;
   onToggleScenario: (id: string) => void;
+  onAnalyzeScenario: (id: string) => void;
+  analysisResults: Record<string, FullAnalysisResponse>;
+  analyzingScenarioId: string | null;
   layers: LayerVisibility;
   onToggleLayer: (layer: keyof LayerVisibility) => void;
 }
@@ -71,6 +74,9 @@ export default function Sidebar({
   onStationSpacingChange,
   onDeleteScenario,
   onToggleScenario,
+  onAnalyzeScenario,
+  analysisResults,
+  analyzingScenarioId,
   layers,
   onToggleLayer,
 }: SidebarProps) {
@@ -232,6 +238,9 @@ export default function Sidebar({
             onStationSpacingChange={onStationSpacingChange}
             onDeleteScenario={onDeleteScenario}
             onToggleScenario={onToggleScenario}
+            onAnalyzeScenario={onAnalyzeScenario}
+            analysisResults={analysisResults}
+            analyzingScenarioId={analyzingScenarioId}
           />
         )}
       </div>

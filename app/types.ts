@@ -113,3 +113,92 @@ export const DEFAULT_WEIGHTS: ScoringWeights = {
   distanceToTransit: 0.25,
   equityFactor: 0.1,
 };
+
+// ---------------------------------------------------------------------------
+// Simulation / Analysis API response types
+// ---------------------------------------------------------------------------
+
+export interface ModeScenarioResult {
+  mode: string;
+  line_length_km: number;
+  num_stations: number;
+  cost_low: number;
+  cost_high: number;
+  daily_riders_low: number;
+  daily_riders_high: number;
+  car_trips_removed_low: number;
+  car_trips_removed_high: number;
+  annual_fare_revenue: number;
+  timeline_years_low: number;
+  timeline_years_high: number;
+  population_served: number;
+  jobs_served: number;
+  cost_per_rider: number;
+  roi_years: number;
+}
+
+export interface CoveredNeighbourhood {
+  neighbourhood: string;
+  benefit_score: number;
+  centroid_lat: number;
+  centroid_lng: number;
+}
+
+export interface CorridorInfo {
+  length_km: number;
+  population_served: number;
+  jobs_served: number;
+  traffic_served: number;
+  avg_benefit_score: number;
+  covered_neighbourhoods: CoveredNeighbourhood[];
+}
+
+export interface ModeComparisonResponse {
+  corridor: CorridorInfo;
+  modes: Record<string, ModeScenarioResult>;
+}
+
+export interface SensitivityPreset {
+  weights: { density_weight: number; traffic_weight: number; distance_weight: number };
+  corridor_avg_benefit: number;
+  top_5_global: { neighbourhood: string; benefit_score: number }[];
+  covered_neighbourhoods: string[];
+}
+
+export interface FullAnalysisResponse {
+  comparison: ModeComparisonResponse;
+  sensitivity: Record<string, SensitivityPreset>;
+  briefing: string;
+  ai_analysis?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Full Simulation (multi-candidate) response types
+// ---------------------------------------------------------------------------
+
+export interface SimulationCandidate {
+  rank: number;
+  path_lat_lng: [number, number][];
+  candidate_score: number;
+  reason: string;
+  name: string;
+  description: string;
+  neighbourhoods: string[];
+  pareto_front: boolean;
+  coverage_km2?: number;
+  avg_benefit?: number;
+  num_neighbourhoods?: number;
+  waypoint_count?: number;
+}
+
+export interface FullSimulationResponse {
+  candidates: SimulationCandidate[];
+  best_candidate_index: number;
+  comparison: ModeComparisonResponse;
+  sensitivity: Record<string, SensitivityPreset>;
+  briefing: string;
+  ai_analysis?: string;
+}
+
+export type SimulationPhase = "idle" | "simulating" | "analyzing" | "complete";
+
