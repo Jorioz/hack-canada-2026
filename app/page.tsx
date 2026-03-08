@@ -6,16 +6,21 @@ import {
     TransitLine,
     Scenario,
     ScenarioMode,
+    ScenarioAIAnalysis,
     LayerVisibility,
     HotspotCluster,
 } from "./types";
 import { MOCK_TRANSIT_LINES } from "./data/mockData";
 import ttcRoutesRaw from "./data/ttc_routes.json";
-import { calculateScenario } from "./utils/simulation";
+import {
+    calculateScenario,
+    calculateStationPositions,
+} from "./utils/simulation";
 import { computeNeedScore } from "./utils/scoring";
 
 import TransitMap from "./components/TransitMap";
 import Sidebar from "./components/Sidebar";
+import ScenarioAnalysisOverlay from "./components/ScenarioAnalysisOverlay";
 import { TrainFront } from "lucide-react";
 
 interface DensityGeoJSON {
@@ -100,6 +105,12 @@ export default function Home() {
 
     // Scenario state
     const [scenarios, setScenarios] = useState<Scenario[]>([]);
+    const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(
+        null,
+    );
+    const [analysisScenario, setAnalysisScenario] = useState<Scenario | null>(
+        null,
+    );
     const [isDrawing, setIsDrawing] = useState(false);
     const [drawingWaypoints, setDrawingWaypoints] = useState<
         [number, number][]
@@ -107,9 +118,25 @@ export default function Home() {
     const [drawingPath, setDrawingPath] = useState<[number, number][]>([]);
     const [isRouting, setIsRouting] = useState(false);
     const [scenarioMode, setScenarioMode] = useState<ScenarioMode>("subway");
-    const [stationSpacing, setStationSpacing] = useState(800);
+    const [stationSpacing, setStationSpacing] = useState(1200);
     const [mapCenter, setMapCenter] = useState<[number, number]>([43.7, -79.4]);
     const [mapZoom, setMapZoom] = useState(11);
+
+    // Recommended spacing by mode
+    const SPACING_DEFAULTS: Record<ScenarioMode, number> = {
+        subway: 1200,
+        surface_lrt: 600,
+        enhanced_bus: 400,
+    };
+
+    // Handle mode change and update spacing to recommended value
+    const handleScenarioModeChange = useCallback(
+        (mode: ScenarioMode) => {
+            setScenarioMode(mode);
+            setStationSpacing(SPACING_DEFAULTS[mode]);
+        },
+        [SPACING_DEFAULTS],
+    );
 
     // AI Route selection state
     const [aiRouteCandidates, setAiRouteCandidates] = useState<
@@ -460,11 +487,17 @@ export default function Home() {
                     zones,
                     transitLines,
                 );
+                const stations = calculateStationPositions(
+                    drawingPath,
+                    stationSpacing,
+                    scenarioMode,
+                );
                 const newScenario: Scenario = {
                     id: `scenario-${Date.now()}`,
                     name: `Scenario ${scenarios.length + 1}`,
                     mode: scenarioMode,
                     path: [...drawingPath],
+                    stations,
                     stationSpacing,
                     result,
                     createdAt: new Date(),
@@ -568,15 +601,47 @@ export default function Home() {
             zones,
             transitLines,
         );
+        const stations = calculateStationPositions(
+            selectedRoute.path_lat_lng,
+            stationSpacing,
+            scenarioMode,
+        );
+
+        // Build AI analysis object to preserve insights
+        const aiAnalysis: ScenarioAIAnalysis = {
+            candidateId: selectedRoute.candidate_id,
+            reason: selectedRoute.reason,
+            reasoning: selectedRoute.reasoning,
+            keyNeighbourhoods: selectedRoute.key_neighbourhoods,
+            tradeoffs: selectedRoute.tradeoffs,
+            neighbourhoodImpacts: selectedRoute.neighbourhood_impacts,
+            trafficSummary: selectedRoute.traffic_summary,
+            connectivitySummary: selectedRoute.connectivity_summary,
+            ridershipEstimate: selectedRoute.ridership_estimate,
+            candidateScore: selectedRoute.candidate_score,
+            totalPopulationServed: corridorInsights?.total_population_served,
+            transitDesertScore: corridorInsights?.transit_desert_score,
+            corridorSummary: corridorInsights?.corridor_summary,
+            analysisSummary: analysisSummary || undefined,
+            allCandidates: aiRouteCandidates.map((c) => ({
+                rank: c.rank,
+                name: c.name,
+                reason: c.reason,
+                candidateScore: c.candidate_score,
+            })),
+        };
+
         const newScenario: Scenario = {
             id: `scenario-${Date.now()}`,
             name: selectedRoute.name || `Scenario ${scenarios.length + 1}`,
             mode: scenarioMode,
             path: [...selectedRoute.path_lat_lng],
+            stations,
             stationSpacing,
             result,
             createdAt: new Date(),
             visible: true,
+            aiAnalysis,
         };
 
         setScenarios((prev) => [...prev, newScenario]);
@@ -593,6 +658,8 @@ export default function Home() {
         zones,
         transitLines,
         scenarios.length,
+        corridorInsights,
+        analysisSummary,
     ]);
 
     const handleCancelRouteSelection = useCallback(() => {
@@ -673,11 +740,14 @@ export default function Home() {
                 isDrawing={isDrawing}
                 drawingPath={drawingPath}
                 scenarioMode={scenarioMode}
-                onScenarioModeChange={setScenarioMode}
+                onScenarioModeChange={handleScenarioModeChange}
                 stationSpacing={stationSpacing}
                 onStationSpacingChange={setStationSpacing}
                 onDeleteScenario={handleDeleteScenario}
                 onToggleScenario={handleToggleScenario}
+                selectedScenarioId={selectedScenarioId}
+                onScenarioSelect={setSelectedScenarioId}
+                onViewAnalysis={setAnalysisScenario}
                 layers={layers}
                 onToggleLayer={toggleLayer}
             />
@@ -709,6 +779,9 @@ export default function Home() {
                     }
                     userWaypointsPreview={
                         showRouteSelector ? userWaypoints : undefined
+                    }
+                    onScenarioClick={(scenario) =>
+                        setSelectedScenarioId(scenario.id)
                     }
                 />
 
@@ -1186,6 +1259,15 @@ export default function Home() {
                         ))}
                     </div>
                 </div>
+            )}
+
+            {/* Scenario Analysis Overlay */}
+            {analysisScenario && (
+                <ScenarioAnalysisOverlay
+                    scenario={analysisScenario}
+                    zones={zones}
+                    onClose={() => setAnalysisScenario(null)}
+                />
             )}
         </main>
     );

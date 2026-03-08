@@ -2,374 +2,630 @@
 
 import { Scenario, ScenarioMode } from "../types";
 import {
-  Plus,
-  Pencil,
-  Trash2,
-  TrainFront,
-  TramFront,
-  Bus,
-  DollarSign,
-  Users,
-  Car,
-  Clock,
-  Ruler,
-  MapPin,
-  BarChart3,
-  Eye,
-  EyeOff,
+    Plus,
+    Pencil,
+    Trash2,
+    TrainFront,
+    TramFront,
+    Bus,
+    DollarSign,
+    Users,
+    Car,
+    Clock,
+    Ruler,
+    MapPin,
+    BarChart3,
+    Eye,
+    EyeOff,
+    Sparkles,
+    ExternalLink,
 } from "lucide-react";
 
 import { SCENARIO_MODE_COLORS } from "../types";
 
 interface ScenarioPanelProps {
-  scenarios: Scenario[];
-  onStartDrawing: () => void;
-  onFinishDrawing: () => void;
-  onCancelDrawing: () => void;
-  isDrawing: boolean;
-  drawingPath: [number, number][];
-  scenarioMode: ScenarioMode;
-  onScenarioModeChange: (mode: ScenarioMode) => void;
-  stationSpacing: number;
-  onStationSpacingChange: (spacing: number) => void;
-  onDeleteScenario: (id: string) => void;
-  onToggleScenario: (id: string) => void;
+    scenarios: Scenario[];
+    onStartDrawing: () => void;
+    onFinishDrawing: () => void;
+    onCancelDrawing: () => void;
+    isDrawing: boolean;
+    drawingPath: [number, number][];
+    scenarioMode: ScenarioMode;
+    onScenarioModeChange: (mode: ScenarioMode) => void;
+    stationSpacing: number;
+    onStationSpacingChange: (spacing: number) => void;
+    onDeleteScenario: (id: string) => void;
+    onToggleScenario: (id: string) => void;
+    selectedScenarioId: string | null;
+    onScenarioSelect: (id: string | null) => void;
+    onViewAnalysis: (scenario: Scenario) => void;
 }
 
 const MODE_OPTIONS: {
-  value: ScenarioMode;
-  label: string;
-  icon: typeof TrainFront;
-  description: string;
+    value: ScenarioMode;
+    label: string;
+    icon: typeof TrainFront;
+    description: string;
 }[] = [
-  {
-    value: "subway",
-    label: "Subway",
-    icon: TrainFront,
-    description: "Underground metro (highest capacity, highest cost)",
-  },
-  {
-    value: "surface_lrt",
-    label: "Surface LRT",
-    icon: TramFront,
-    description: "Light rail on dedicated lanes (medium capacity)",
-  },
-  {
-    value: "enhanced_bus",
-    label: "Enhanced Bus",
-    icon: Bus,
-    description: "Bus rapid transit with priority lanes (lowest cost)",
-  },
+    {
+        value: "subway",
+        label: "Subway",
+        icon: TrainFront,
+        description: "Underground metro (highest capacity, highest cost)",
+    },
+    {
+        value: "surface_lrt",
+        label: "Surface LRT",
+        icon: TramFront,
+        description: "Light rail on dedicated lanes (medium capacity)",
+    },
+    {
+        value: "enhanced_bus",
+        label: "Enhanced Bus",
+        icon: Bus,
+        description: "Bus rapid transit with priority lanes (lowest cost)",
+    },
 ];
 
+// Station spacing ranges by mode (in meters)
+const SPACING_RANGES: Record<
+    ScenarioMode,
+    { min: number; max: number; step: number; recommended: number }
+> = {
+    subway: { min: 800, max: 2000, step: 100, recommended: 1200 },
+    surface_lrt: { min: 400, max: 1000, step: 50, recommended: 600 },
+    enhanced_bus: { min: 250, max: 600, step: 50, recommended: 400 },
+};
+
 function formatCost(millions: number): string {
-  if (millions >= 1000) return `$${(millions / 1000).toFixed(1)}B`;
-  return `$${millions.toFixed(0)}M`;
+    if (millions >= 1000) return `$${(millions / 1000).toFixed(1)}B`;
+    return `$${millions.toFixed(0)}M`;
 }
 
 function formatRevenue(amount: number): string {
-  if (amount >= 1_000_000_000) return `$${(amount / 1_000_000_000).toFixed(1)}B`;
-  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(0)}M`;
-  return `$${(amount / 1_000).toFixed(0)}K`;
+    if (amount >= 1_000_000_000)
+        return `$${(amount / 1_000_000_000).toFixed(1)}B`;
+    if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(0)}M`;
+    return `$${(amount / 1_000).toFixed(0)}K`;
 }
 
 export default function ScenarioPanel({
-  scenarios,
-  onStartDrawing,
-  onFinishDrawing,
-  onCancelDrawing,
-  isDrawing,
-  drawingPath,
-  scenarioMode,
-  onScenarioModeChange,
-  stationSpacing,
-  onStationSpacingChange,
-  onDeleteScenario,
-  onToggleScenario,
+    scenarios,
+    onStartDrawing,
+    onFinishDrawing,
+    onCancelDrawing,
+    isDrawing,
+    drawingPath,
+    scenarioMode,
+    onScenarioModeChange,
+    stationSpacing,
+    onStationSpacingChange,
+    onDeleteScenario,
+    onToggleScenario,
+    selectedScenarioId,
+    onScenarioSelect,
+    onViewAnalysis,
 }: ScenarioPanelProps) {
-  return (
-    <div className="p-4 space-y-4 animate-fade-up">
-      {/* Header */}
-      <div>
-        <h2 className="text-sm font-bold text-[var(--color-text-primary)]">
-          Transit Scenario Builder
-        </h2>
-        <p className="text-[11px] text-[var(--color-text-muted)] mt-1">
-          Draw proposed transit lines on the map and get instant cost, ridership, and
-          impact estimates.
-        </p>
-      </div>
-
-      {/* Mode Selection */}
-      <div>
-        <p className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium mb-2">
-          Transit Mode
-        </p>
-        <div className="space-y-1.5">
-          {MODE_OPTIONS.map(({ value, label, icon: Icon, description }) => (
-            <button
-              key={value}
-              onClick={() => onScenarioModeChange(value)}
-              className={`mode-btn w-full text-left ${
-                scenarioMode === value ? "active" : ""
-              }`}
-            >
-              <Icon size={16} />
-              <div className="flex-1">
-                <span className="text-xs font-medium">{label}</span>
-                <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
-                  {description}
+    return (
+        <div className="p-4 space-y-4 animate-fade-up">
+            {/* Header */}
+            <div>
+                <h2 className="text-sm font-bold text-[var(--color-text-primary)]">
+                    Transit Scenario Builder
+                </h2>
+                <p className="text-[11px] text-[var(--color-text-muted)] mt-1">
+                    Draw proposed transit lines on the map and get instant cost,
+                    ridership, and impact estimates.
                 </p>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
+            </div>
 
-      {/* Station Spacing Slider */}
-      <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <p className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium">
-            Station Spacing
-          </p>
-          <span className="text-xs font-medium text-[var(--color-accent-cyan)]">
-            {stationSpacing}m
-          </span>
-        </div>
-        <input
-          type="range"
-          min={400}
-          max={1200}
-          step={100}
-          value={stationSpacing}
-          onChange={(e) => onStationSpacingChange(Number(e.target.value))}
-          className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
-          style={{
-            background: `linear-gradient(to right, var(--color-accent-cyan) 0%, var(--color-accent-cyan) ${
-              ((stationSpacing - 400) / 800) * 100
-            }%, rgba(255,255,255,0.1) ${
-              ((stationSpacing - 400) / 800) * 100
-            }%, rgba(255,255,255,0.1) 100%)`,
-          }}
-        />
-        <div className="flex justify-between mt-1">
-          <span className="text-[9px] text-[var(--color-text-muted)]">400m</span>
-          <span className="text-[9px] text-[var(--color-text-muted)]">1200m</span>
-        </div>
-      </div>
-
-      {/* Draw Button */}
-      {!isDrawing ? (
-        <button
-          onClick={onStartDrawing}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-gradient-to-r from-[var(--color-accent-cyan)] to-[var(--color-accent-blue)] text-white font-medium text-sm hover:brightness-110 transition-all hover:scale-[1.02] active:scale-[0.98]"
-        >
-          <Plus size={16} />
-          Draw New Transit Line
-        </button>
-      ) : (
-        <div className="glass-card p-3 space-y-2">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-xs font-medium text-[var(--color-text-primary)]">
-              Drawing Mode Active
-            </span>
-          </div>
-          <p className="text-[10px] text-[var(--color-text-muted)]">
-            Click on the map to place waypoints. Min. 2 points required.
-          </p>
-          <p className="text-[10px] text-[var(--color-accent-cyan)]">
-            {drawingPath.length} point{drawingPath.length !== 1 ? "s" : ""} placed
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={onFinishDrawing}
-              disabled={drawingPath.length < 2}
-              className="flex-1 py-2 rounded-md text-xs font-medium bg-[var(--color-accent-green)] text-white disabled:opacity-30 disabled:cursor-not-allowed hover:brightness-110 transition"
-            >
-              Finish Line
-            </button>
-            <button
-              onClick={onCancelDrawing}
-              className="py-2 px-3 rounded-md text-xs font-medium bg-[rgba(239,68,68,0.15)] text-[var(--color-accent-red)] hover:bg-[rgba(239,68,68,0.25)] transition"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Saved Scenarios */}
-      {scenarios.length > 0 && (
-        <div>
-          <p className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium mb-2">
-            Saved Scenarios ({scenarios.length})
-          </p>
-          <div className="space-y-3">
-            {scenarios.map((scenario) => {
-              const modeColor = SCENARIO_MODE_COLORS[scenario.mode] || "#3b82f6";
-              return (
-              <div
-                key={scenario.id}
-                className="relative rounded-lg overflow-hidden"
-                style={{
-                  background: `linear-gradient(135deg, ${modeColor}12 0%, rgba(15,23,42,0.9) 60%)`,
-                  border: `1px solid ${modeColor}40`,
-                }}
-              >
-                {/* Colored accent bar */}
-                <div
-                  className="absolute left-0 top-0 bottom-0 w-1"
-                  style={{ background: modeColor }}
-                />
-
-                <div className="pl-4 pr-3 py-3 space-y-3">
-                  {/* Scenario Header */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-7 h-7 rounded-md flex items-center justify-center"
-                        style={{ background: `${modeColor}25` }}
-                      >
-                        {scenario.mode === "subway" && (
-                          <TrainFront size={15} color={modeColor} />
-                        )}
-                        {scenario.mode === "surface_lrt" && (
-                          <TramFront size={15} color={modeColor} />
-                        )}
-                        {scenario.mode === "enhanced_bus" && (
-                          <Bus size={15} color={modeColor} />
-                        )}
-                      </div>
-                      <div>
-                        <span
-                          className={`text-sm font-bold block leading-tight ${
-                            scenario.visible ? "text-[var(--color-text-primary)]" : "text-[var(--color-text-muted)] line-through"
-                          }`}
-                        >
-                          {scenario.name}
-                        </span>
-                        <span className="text-[10px] font-medium" style={{ color: modeColor }}>
-                          {scenario.mode === "subway" ? "Subway" : scenario.mode === "surface_lrt" ? "Surface LRT" : "Enhanced Bus"}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => onToggleScenario(scenario.id)}
-                        className="p-1.5 rounded-md transition"
-                        style={{ background: scenario.visible ? `${modeColor}15` : "transparent" }}
-                        title={scenario.visible ? "Hide scenario" : "Show scenario"}
-                      >
-                        {scenario.visible ? (
-                          <Eye size={13} color={modeColor} />
-                        ) : (
-                          <EyeOff size={13} className="text-[var(--color-text-muted)]" />
-                        )}
-                      </button>
-                      <button
-                        onClick={() => onDeleteScenario(scenario.id)}
-                        className="p-1.5 rounded-md hover:bg-[rgba(239,68,68,0.15)] transition"
-                        title="Delete scenario"
-                      >
-                        <Trash2
-                          size={13}
-                          className="text-[var(--color-text-muted)] hover:text-[var(--color-accent-red)]"
-                        />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Results */}
-                  {scenario.result && (
-                    <div className={scenario.visible ? "" : "opacity-40 grayscale pointer-events-none"}>
-                      {/* Key metrics row */}
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="rounded-md p-2" style={{ background: "rgba(0,0,0,0.25)" }}>
-                          <div className="flex items-center gap-1 mb-1">
-                            <DollarSign size={11} className="text-[var(--color-accent-amber)]" />
-                            <span className="text-[9px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium">Est. Cost</span>
-                          </div>
-                          <p className="text-base font-black text-[var(--color-accent-amber)]">
-                            {formatCost(scenario.result.costLow)}–{formatCost(scenario.result.costHigh)}
-                          </p>
-                        </div>
-                        <div className="rounded-md p-2" style={{ background: "rgba(0,0,0,0.25)" }}>
-                          <div className="flex items-center gap-1 mb-1">
-                            <Users size={11} className="text-[var(--color-accent-cyan)]" />
-                            <span className="text-[9px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium">Daily Riders</span>
-                          </div>
-                          <p className="text-base font-black text-[var(--color-accent-cyan)]">
-                            {scenario.result.dailyRidersLow.toLocaleString()}–{scenario.result.dailyRidersHigh.toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="rounded-md p-2" style={{ background: "rgba(0,0,0,0.25)" }}>
-                          <div className="flex items-center gap-1 mb-1">
-                            <Car size={11} className="text-[var(--color-accent-green)]" />
-                            <span className="text-[9px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium">Cars Removed</span>
-                          </div>
-                          <p className="text-base font-black text-[var(--color-accent-green)]">
-                            {scenario.result.carTripsRemovedLow.toLocaleString()}–{scenario.result.carTripsRemovedHigh.toLocaleString()}
-                            <span className="text-[9px] font-normal text-[var(--color-text-muted)]">/day</span>
-                          </p>
-                        </div>
-                        <div className="rounded-md p-2" style={{ background: "rgba(0,0,0,0.25)" }}>
-                          <div className="flex items-center gap-1 mb-1">
-                            <BarChart3 size={11} className="text-[var(--color-accent-blue)]" />
-                            <span className="text-[9px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium">Annual Rev</span>
-                          </div>
-                          <p className="text-base font-black text-[var(--color-accent-blue)]">
-                            {formatRevenue(scenario.result.annualFareRevenue)}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Bottom info bar */}
-                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-[rgba(255,255,255,0.06)]">
-                        <div className="flex items-center gap-3 text-[10px] text-[var(--color-text-muted)]">
-                          <span className="flex items-center gap-1">
-                            <Ruler size={10} /> {scenario.result.lineLengthKm} km
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <MapPin size={10} /> {scenario.result.numStations} stn
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock size={10} /> {scenario.result.timelineYearsLow}–{scenario.result.timelineYearsHigh} yr
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Served area */}
-                      <div className="text-[10px] text-[var(--color-text-muted)] mt-1">
-                        Serves ~{scenario.result.populationServed.toLocaleString()} residents
-                        and ~{scenario.result.jobsServed.toLocaleString()} jobs within 800m
-                      </div>
-
-                      {/* Disclaimer */}
-                      <p className="text-[9px] text-[var(--color-text-muted)] italic mt-1 opacity-60">
-                        ⚠️ Screening-level estimates only
-                      </p>
-                    </div>
-                  )}
+            {/* Mode Selection */}
+            <div>
+                <p className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium mb-2">
+                    Transit Mode
+                </p>
+                <div className="space-y-1.5">
+                    {MODE_OPTIONS.map(
+                        ({ value, label, icon: Icon, description }) => (
+                            <button
+                                key={value}
+                                onClick={() => onScenarioModeChange(value)}
+                                className={`mode-btn w-full text-left ${
+                                    scenarioMode === value ? "active" : ""
+                                }`}
+                            >
+                                <Icon size={16} />
+                                <div className="flex-1">
+                                    <span className="text-xs font-medium">
+                                        {label}
+                                    </span>
+                                    <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                                        {description}
+                                    </p>
+                                </div>
+                            </button>
+                        ),
+                    )}
                 </div>
-              </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+            </div>
 
-      {/* Instructions */}
-      {scenarios.length === 0 && !isDrawing && (
-        <div className="glass-card p-3">
-          <p className="text-[10px] text-[var(--color-text-muted)] leading-relaxed">
-            🚇 <strong className="text-[var(--color-text-secondary)]">How it works:</strong>{" "}
-            Select a transit mode, adjust station spacing, then click {'"'}Draw New Transit
-            Line{'"'}. Click on the map to place waypoints for your route. When done, click
-            Finish to see instant cost and ridership estimates.
-          </p>
+            {/* Station Spacing Slider */}
+            <div>
+                <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium">
+                        Station Spacing
+                    </p>
+                    <span className="text-xs font-medium text-[var(--color-accent-cyan)]">
+                        {stationSpacing >= 1000
+                            ? `${(stationSpacing / 1000).toFixed(1)}km`
+                            : `${stationSpacing}m`}
+                    </span>
+                </div>
+                <input
+                    type="range"
+                    min={SPACING_RANGES[scenarioMode].min}
+                    max={SPACING_RANGES[scenarioMode].max}
+                    step={SPACING_RANGES[scenarioMode].step}
+                    value={Math.min(
+                        Math.max(
+                            stationSpacing,
+                            SPACING_RANGES[scenarioMode].min,
+                        ),
+                        SPACING_RANGES[scenarioMode].max,
+                    )}
+                    onChange={(e) =>
+                        onStationSpacingChange(Number(e.target.value))
+                    }
+                    className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+                    style={{
+                        background: `linear-gradient(to right, var(--color-accent-cyan) 0%, var(--color-accent-cyan) ${
+                            ((Math.min(
+                                Math.max(
+                                    stationSpacing,
+                                    SPACING_RANGES[scenarioMode].min,
+                                ),
+                                SPACING_RANGES[scenarioMode].max,
+                            ) -
+                                SPACING_RANGES[scenarioMode].min) /
+                                (SPACING_RANGES[scenarioMode].max -
+                                    SPACING_RANGES[scenarioMode].min)) *
+                            100
+                        }%, rgba(255,255,255,0.1) ${
+                            ((Math.min(
+                                Math.max(
+                                    stationSpacing,
+                                    SPACING_RANGES[scenarioMode].min,
+                                ),
+                                SPACING_RANGES[scenarioMode].max,
+                            ) -
+                                SPACING_RANGES[scenarioMode].min) /
+                                (SPACING_RANGES[scenarioMode].max -
+                                    SPACING_RANGES[scenarioMode].min)) *
+                            100
+                        }%, rgba(255,255,255,0.1) 100%)`,
+                    }}
+                />
+                <div className="flex justify-between mt-1">
+                    <span className="text-[9px] text-[var(--color-text-muted)]">
+                        {SPACING_RANGES[scenarioMode].min}m
+                    </span>
+                    <span className="text-[9px] text-[var(--color-text-muted)]">
+                        {SPACING_RANGES[scenarioMode].max >= 1000
+                            ? `${(SPACING_RANGES[scenarioMode].max / 1000).toFixed(1)}km`
+                            : `${SPACING_RANGES[scenarioMode].max}m`}
+                    </span>
+                </div>
+            </div>
+
+            {/* Draw Button */}
+            {!isDrawing ? (
+                <button
+                    onClick={onStartDrawing}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-gradient-to-r from-[var(--color-accent-cyan)] to-[var(--color-accent-blue)] text-white font-medium text-sm hover:brightness-110 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                >
+                    <Plus size={16} />
+                    Draw New Transit Line
+                </button>
+            ) : (
+                <div className="glass-card p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                        <span className="text-xs font-medium text-[var(--color-text-primary)]">
+                            Drawing Mode Active
+                        </span>
+                    </div>
+                    <p className="text-[10px] text-[var(--color-text-muted)]">
+                        Click on the map to place waypoints. Min. 2 points
+                        required.
+                    </p>
+                    <p className="text-[10px] text-[var(--color-accent-cyan)]">
+                        {drawingPath.length} point
+                        {drawingPath.length !== 1 ? "s" : ""} placed
+                    </p>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={onFinishDrawing}
+                            disabled={drawingPath.length < 2}
+                            className="flex-1 py-2 rounded-md text-xs font-medium bg-[var(--color-accent-green)] text-white disabled:opacity-30 disabled:cursor-not-allowed hover:brightness-110 transition"
+                        >
+                            Finish Line
+                        </button>
+                        <button
+                            onClick={onCancelDrawing}
+                            className="py-2 px-3 rounded-md text-xs font-medium bg-[rgba(239,68,68,0.15)] text-[var(--color-accent-red)] hover:bg-[rgba(239,68,68,0.25)] transition"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Saved Scenarios */}
+            {scenarios.length > 0 && (
+                <div>
+                    <p className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium mb-2">
+                        Saved Scenarios ({scenarios.length})
+                    </p>
+                    <div className="space-y-3">
+                        {scenarios.map((scenario) => {
+                            const modeColor =
+                                SCENARIO_MODE_COLORS[scenario.mode] ||
+                                "#3b82f6";
+                            const isSelected =
+                                selectedScenarioId === scenario.id;
+                            return (
+                                <div
+                                    key={scenario.id}
+                                    className="relative rounded-lg overflow-hidden cursor-pointer transition-all duration-200"
+                                    style={{
+                                        background: `linear-gradient(135deg, ${modeColor}${isSelected ? "20" : "12"} 0%, rgba(15,23,42,0.9) 60%)`,
+                                        border: `1px solid ${modeColor}${isSelected ? "80" : "40"}`,
+                                        outline: isSelected
+                                            ? `2px solid ${modeColor}`
+                                            : "none",
+                                        outlineOffset: "2px",
+                                    }}
+                                    onClick={() =>
+                                        onScenarioSelect(
+                                            isSelected ? null : scenario.id,
+                                        )
+                                    }
+                                >
+                                    {/* Colored accent bar */}
+                                    <div
+                                        className="absolute left-0 top-0 bottom-0 w-1"
+                                        style={{ background: modeColor }}
+                                    />
+
+                                    <div className="pl-4 pr-3 py-3 space-y-3">
+                                        {/* Scenario Header */}
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <div
+                                                    className="w-7 h-7 rounded-md flex items-center justify-center"
+                                                    style={{
+                                                        background: `${modeColor}25`,
+                                                    }}
+                                                >
+                                                    {scenario.mode ===
+                                                        "subway" && (
+                                                        <TrainFront
+                                                            size={15}
+                                                            color={modeColor}
+                                                        />
+                                                    )}
+                                                    {scenario.mode ===
+                                                        "surface_lrt" && (
+                                                        <TramFront
+                                                            size={15}
+                                                            color={modeColor}
+                                                        />
+                                                    )}
+                                                    {scenario.mode ===
+                                                        "enhanced_bus" && (
+                                                        <Bus
+                                                            size={15}
+                                                            color={modeColor}
+                                                        />
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <span
+                                                        className={`text-sm font-bold block leading-tight ${
+                                                            scenario.visible
+                                                                ? "text-[var(--color-text-primary)]"
+                                                                : "text-[var(--color-text-muted)] line-through"
+                                                        }`}
+                                                    >
+                                                        {scenario.name}
+                                                    </span>
+                                                    <span
+                                                        className="text-[10px] font-medium"
+                                                        style={{
+                                                            color: modeColor,
+                                                        }}
+                                                    >
+                                                        {scenario.mode ===
+                                                        "subway"
+                                                            ? "Subway"
+                                                            : scenario.mode ===
+                                                                "surface_lrt"
+                                                              ? "Surface LRT"
+                                                              : "Enhanced Bus"}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <button
+                                                    onClick={() =>
+                                                        onToggleScenario(
+                                                            scenario.id,
+                                                        )
+                                                    }
+                                                    className="p-1.5 rounded-md transition"
+                                                    style={{
+                                                        background:
+                                                            scenario.visible
+                                                                ? `${modeColor}15`
+                                                                : "transparent",
+                                                    }}
+                                                    title={
+                                                        scenario.visible
+                                                            ? "Hide scenario"
+                                                            : "Show scenario"
+                                                    }
+                                                >
+                                                    {scenario.visible ? (
+                                                        <Eye
+                                                            size={13}
+                                                            color={modeColor}
+                                                        />
+                                                    ) : (
+                                                        <EyeOff
+                                                            size={13}
+                                                            className="text-[var(--color-text-muted)]"
+                                                        />
+                                                    )}
+                                                </button>
+                                                <button
+                                                    onClick={() =>
+                                                        onDeleteScenario(
+                                                            scenario.id,
+                                                        )
+                                                    }
+                                                    className="p-1.5 rounded-md hover:bg-[rgba(239,68,68,0.15)] transition"
+                                                    title="Delete scenario"
+                                                >
+                                                    <Trash2
+                                                        size={13}
+                                                        className="text-[var(--color-text-muted)] hover:text-[var(--color-accent-red)]"
+                                                    />
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Results */}
+                                        {scenario.result && (
+                                            <div
+                                                className={
+                                                    scenario.visible
+                                                        ? ""
+                                                        : "opacity-40 grayscale pointer-events-none"
+                                                }
+                                            >
+                                                {/* Key metrics row */}
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div
+                                                        className="rounded-md p-2"
+                                                        style={{
+                                                            background:
+                                                                "rgba(0,0,0,0.25)",
+                                                        }}
+                                                    >
+                                                        <div className="flex items-center gap-1 mb-1">
+                                                            <DollarSign
+                                                                size={11}
+                                                                className="text-[var(--color-accent-amber)]"
+                                                            />
+                                                            <span className="text-[9px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium">
+                                                                Est. Cost
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-base font-black text-[var(--color-accent-amber)]">
+                                                            {formatCost(
+                                                                scenario.result
+                                                                    .costLow,
+                                                            )}
+                                                            –
+                                                            {formatCost(
+                                                                scenario.result
+                                                                    .costHigh,
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                    <div
+                                                        className="rounded-md p-2"
+                                                        style={{
+                                                            background:
+                                                                "rgba(0,0,0,0.25)",
+                                                        }}
+                                                    >
+                                                        <div className="flex items-center gap-1 mb-1">
+                                                            <Users
+                                                                size={11}
+                                                                className="text-[var(--color-accent-cyan)]"
+                                                            />
+                                                            <span className="text-[9px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium">
+                                                                Daily Riders
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-base font-black text-[var(--color-accent-cyan)]">
+                                                            {scenario.result.dailyRidersLow.toLocaleString()}
+                                                            –
+                                                            {scenario.result.dailyRidersHigh.toLocaleString()}
+                                                        </p>
+                                                    </div>
+                                                    <div
+                                                        className="rounded-md p-2"
+                                                        style={{
+                                                            background:
+                                                                "rgba(0,0,0,0.25)",
+                                                        }}
+                                                    >
+                                                        <div className="flex items-center gap-1 mb-1">
+                                                            <Car
+                                                                size={11}
+                                                                className="text-[var(--color-accent-green)]"
+                                                            />
+                                                            <span className="text-[9px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium">
+                                                                Cars Removed
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-base font-black text-[var(--color-accent-green)]">
+                                                            {scenario.result.carTripsRemovedLow.toLocaleString()}
+                                                            –
+                                                            {scenario.result.carTripsRemovedHigh.toLocaleString()}
+                                                            <span className="text-[9px] font-normal text-[var(--color-text-muted)]">
+                                                                /day
+                                                            </span>
+                                                        </p>
+                                                    </div>
+                                                    <div
+                                                        className="rounded-md p-2"
+                                                        style={{
+                                                            background:
+                                                                "rgba(0,0,0,0.25)",
+                                                        }}
+                                                    >
+                                                        <div className="flex items-center gap-1 mb-1">
+                                                            <BarChart3
+                                                                size={11}
+                                                                className="text-[var(--color-accent-blue)]"
+                                                            />
+                                                            <span className="text-[9px] uppercase tracking-wider text-[var(--color-text-muted)] font-medium">
+                                                                Annual Rev
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-base font-black text-[var(--color-accent-blue)]">
+                                                            {formatRevenue(
+                                                                scenario.result
+                                                                    .annualFareRevenue,
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                {/* Bottom info bar */}
+                                                <div className="flex items-center justify-between mt-2 pt-2 border-t border-[rgba(255,255,255,0.06)]">
+                                                    <div className="flex items-center gap-3 text-[10px] text-[var(--color-text-muted)]">
+                                                        <span className="flex items-center gap-1">
+                                                            <Ruler size={10} />{" "}
+                                                            {
+                                                                scenario.result
+                                                                    .lineLengthKm
+                                                            }{" "}
+                                                            km
+                                                        </span>
+                                                        <span className="flex items-center gap-1">
+                                                            <MapPin size={10} />{" "}
+                                                            {
+                                                                scenario.result
+                                                                    .numStations
+                                                            }{" "}
+                                                            stn
+                                                        </span>
+                                                        <span className="flex items-center gap-1">
+                                                            <Clock size={10} />{" "}
+                                                            {
+                                                                scenario.result
+                                                                    .timelineYearsLow
+                                                            }
+                                                            –
+                                                            {
+                                                                scenario.result
+                                                                    .timelineYearsHigh
+                                                            }{" "}
+                                                            yr
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Served area */}
+                                                <div className="text-[10px] text-[var(--color-text-muted)] mt-1">
+                                                    Serves ~
+                                                    {scenario.result.populationServed.toLocaleString()}{" "}
+                                                    residents and ~
+                                                    {scenario.result.jobsServed.toLocaleString()}{" "}
+                                                    jobs within 800m
+                                                </div>
+
+                                                {/* Disclaimer */}
+                                                <p className="text-[9px] text-[var(--color-text-muted)] italic mt-1 opacity-60">
+                                                    ⚠️ Screening-level estimates
+                                                    only
+                                                </p>
+
+                                                {/* AI Analysis Button */}
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onViewAnalysis(
+                                                            scenario,
+                                                        );
+                                                    }}
+                                                    className="mt-3 w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg transition hover:scale-[1.02] active:scale-[0.98]"
+                                                    style={{
+                                                        background: `linear-gradient(135deg, ${modeColor}25 0%, ${modeColor}10 100%)`,
+                                                        border: `1px solid ${modeColor}40`,
+                                                    }}
+                                                >
+                                                    <Sparkles
+                                                        size={14}
+                                                        style={{
+                                                            color: modeColor,
+                                                        }}
+                                                    />
+                                                    <span
+                                                        className="text-xs font-medium"
+                                                        style={{
+                                                            color: modeColor,
+                                                        }}
+                                                    >
+                                                        View Full Analysis
+                                                    </span>
+                                                    <ExternalLink
+                                                        size={12}
+                                                        style={{
+                                                            color: modeColor,
+                                                        }}
+                                                        className="opacity-60"
+                                                    />
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* Instructions */}
+            {scenarios.length === 0 && !isDrawing && (
+                <div className="glass-card p-3">
+                    <p className="text-[10px] text-[var(--color-text-muted)] leading-relaxed">
+                        🚇{" "}
+                        <strong className="text-[var(--color-text-secondary)]">
+                            How it works:
+                        </strong>{" "}
+                        Select a transit mode, adjust station spacing, then
+                        click {'"'}Draw New Transit Line{'"'}. Click on the map
+                        to place waypoints for your route. When done, click
+                        Finish to see instant cost and ridership estimates.
+                    </p>
+                </div>
+            )}
         </div>
-      )}
-    </div>
-  );
+    );
 }

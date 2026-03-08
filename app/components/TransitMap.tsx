@@ -7,6 +7,7 @@ import {
     HotspotCluster,
     LayerVisibility,
     Zone,
+    SCENARIO_MODE_COLORS,
 } from "../types";
 
 function getDensityColor(ratio: number): string {
@@ -59,6 +60,7 @@ interface TransitMapProps {
     onLineClick: (line: TransitLine) => void;
     onZoneClick: (zone: Zone) => void;
     onMapClick: (latlng: [number, number]) => void;
+    onScenarioClick?: (scenario: Scenario) => void;
     layers: LayerVisibility;
     isDrawing: boolean;
     drawingPath: [number, number][];
@@ -80,6 +82,7 @@ export default function TransitMap({
     onLineClick,
     onZoneClick,
     onMapClick,
+    onScenarioClick,
     layers,
     isDrawing,
     drawingPath,
@@ -117,6 +120,7 @@ export default function TransitMap({
     });
     const onLineClickRef = useRef(onLineClick);
     const onMapClickRef = useRef(onMapClick);
+    const onScenarioClickRef = useRef(onScenarioClick);
 
     // Keep refs up to date
     useEffect(() => {
@@ -126,6 +130,10 @@ export default function TransitMap({
     useEffect(() => {
         onMapClickRef.current = onMapClick;
     }, [onMapClick]);
+
+    useEffect(() => {
+        onScenarioClickRef.current = onScenarioClick;
+    }, [onScenarioClick]);
 
     // Initialize map
     useEffect(() => {
@@ -565,7 +573,6 @@ export default function TransitMap({
 
         const updateScenarios = async () => {
             const L = (await import("leaflet")).default;
-            const { SCENARIO_MODE_COLORS } = await import("../types");
 
             lg.clearLayers();
 
@@ -574,63 +581,169 @@ export default function TransitMap({
 
                 const color = SCENARIO_MODE_COLORS[scenario.mode] || "#3b82f6";
 
-                // Outer glow layer
+                // Outer glow layer (non-interactive)
                 L.polyline(scenario.path, {
                     color,
-                    weight: 12,
-                    opacity: 0.25,
+                    weight: 14,
+                    opacity: 0.2,
                     lineCap: "round",
                     lineJoin: "round",
                     pane: "scenarioPane",
                     interactive: false,
                 }).addTo(lg);
 
-                // Mid glow layer
-                L.polyline(scenario.path, {
+                // Mid glow layer (non-interactive)
+                const midGlow = L.polyline(scenario.path, {
                     color,
-                    weight: 7,
-                    opacity: 0.45,
+                    weight: 8,
+                    opacity: 0.4,
                     lineCap: "round",
                     lineJoin: "round",
                     pane: "scenarioPane",
                     interactive: false,
-                }).addTo(lg);
+                });
+                midGlow.addTo(lg);
 
-                // Core solid line
+                // Core solid line (interactive - handles hover/click)
                 const coreLine = L.polyline(scenario.path, {
                     color,
-                    weight: 4,
+                    weight: 5,
                     opacity: 1,
                     lineCap: "round",
                     lineJoin: "round",
                     pane: "scenarioPane",
                 });
 
-                // Animated dashed overlay (marching ants)
-                const dashLine = L.polyline(scenario.path, {
-                    color: "#fff",
-                    weight: 3,
-                    opacity: 0.6,
-                    dashArray: "8, 12",
-                    lineCap: "round",
-                    pane: "scenarioPane",
-                    interactive: false,
-                    className: "scenario-march",
+                // Tooltip for scenario
+                const tooltipContent = `<div style="color:#1e293b;font-size:12px;white-space:nowrap">
+                    <strong style="color:${color}">${scenario.name}</strong><br/>
+                    Mode: ${scenario.mode.replace("_", " ")}<br/>
+                    ${scenario.result ? `Length: ${scenario.result.lineLengthKm} km | ${scenario.stations?.length || 0} stations` : ""}
+                </div>`;
+
+                coreLine.bindTooltip(tooltipContent, {
+                    sticky: true,
+                    className: "transit-tooltip",
                 });
 
+                // Hover effects
+                coreLine.on("mouseover", function (e) {
+                    const layer = e.target;
+                    layer.setStyle({
+                        weight: 8,
+                        opacity: 1,
+                    });
+                    midGlow.setStyle({
+                        weight: 12,
+                        opacity: 0.6,
+                    });
+                    layer.bringToFront();
+                });
+
+                coreLine.on("mouseout", function (e) {
+                    const layer = e.target;
+                    layer.setStyle({
+                        weight: 5,
+                        opacity: 1,
+                    });
+                    midGlow.setStyle({
+                        weight: 8,
+                        opacity: 0.4,
+                    });
+                });
+
+                // Click handler
+                coreLine.on("click", () => {
+                    if (onScenarioClickRef.current) {
+                        onScenarioClickRef.current(scenario);
+                    }
+                });
+
+                // Popup for detailed info
                 let popupContent = `<div style="color:#1e293b;font-size:13px">
-          <strong>${scenario.name}</strong><br/>
-          Mode: ${scenario.mode.replace("_", " ")}`;
+                    <strong style="color:${color}">${scenario.name}</strong><br/>
+                    Mode: ${scenario.mode.replace("_", " ")}`;
 
                 if (scenario.result) {
                     popupContent += `<br/>Length: ${scenario.result.lineLengthKm} km
-            <br/>Est. Riders: ${scenario.result.dailyRidersLow.toLocaleString()}-${scenario.result.dailyRidersHigh.toLocaleString()}/day`;
+                        <br/>Stations: ${scenario.stations?.length || scenario.result.numStations}
+                        <br/>Est. Riders: ${scenario.result.dailyRidersLow.toLocaleString()}-${scenario.result.dailyRidersHigh.toLocaleString()}/day`;
                 }
 
                 popupContent += "</div>";
                 coreLine.bindPopup(popupContent);
                 coreLine.addTo(lg);
+
+                // Animated dashed overlay (marching ants)
+                const dashLine = L.polyline(scenario.path, {
+                    color: "#fff",
+                    weight: 2,
+                    opacity: 0.5,
+                    dashArray: "6, 10",
+                    lineCap: "round",
+                    pane: "scenarioPane",
+                    interactive: false,
+                    className: "scenario-march",
+                });
                 dashLine.addTo(lg);
+
+                // Draw stations along the scenario line with enhanced styling
+                if (scenario.stations && scenario.stations.length > 0) {
+                    scenario.stations.forEach((station, index) => {
+                        const isTerminal =
+                            index === 0 ||
+                            index === scenario.stations.length - 1;
+
+                        // Outer glow for station
+                        L.circleMarker(station, {
+                            radius: isTerminal ? 14 : 10,
+                            fillColor: color,
+                            fillOpacity: 0.3,
+                            color: "transparent",
+                            weight: 0,
+                            pane: "scenarioPane",
+                        }).addTo(lg);
+
+                        // Station marker with enhanced styling
+                        const stationMarker = L.circleMarker(station, {
+                            radius: isTerminal ? 9 : 6,
+                            fillColor: "#fff",
+                            fillOpacity: 1,
+                            color: color,
+                            weight: isTerminal ? 4 : 3,
+                            pane: "scenarioPane",
+                        });
+
+                        // Rich tooltip with station info
+                        const stationName = isTerminal
+                            ? index === 0
+                                ? "Terminal (Start)"
+                                : "Terminal (End)"
+                            : `Station ${index + 1}`;
+
+                        stationMarker.bindTooltip(
+                            `<div style="color:#1e293b;font-size:11px;padding:2px 4px">
+                                <strong style="color:${color}">${stationName}</strong>
+                                <br/><span style="font-size:10px;color:#64748b">${scenario.name}</span>
+                            </div>`,
+                            { direction: "top", offset: [0, -8] },
+                        );
+
+                        stationMarker.addTo(lg);
+
+                        // Inner dot for terminals
+                        if (isTerminal) {
+                            L.circleMarker(station, {
+                                radius: 3,
+                                fillColor: color,
+                                fillOpacity: 1,
+                                color: "transparent",
+                                weight: 0,
+                                pane: "scenarioPane",
+                            }).addTo(lg);
+                        }
+                    });
+                }
             });
         };
 
